@@ -8,7 +8,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.oyama.scanapp
-        api_key: Codemagic
       vars:
         XCODE_WORKSPACE: "ios/MedicalScan.xcworkspace"
         XCODE_SCHEME: "MedicalScan"
