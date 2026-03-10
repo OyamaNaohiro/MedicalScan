@@ -2,6 +2,8 @@ workflows:
   ios-testflight:
     name: iOS TestFlight
     max_build_duration: 60
+    integrations:
+      app_store_connect: Codemagic
     environment:
       ios_signing:
         distribution_type: app_store
