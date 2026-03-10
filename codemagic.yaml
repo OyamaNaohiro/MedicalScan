@@ -7,7 +7,7 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.oyama.MedicalScan
+        bundle_identifier: com.oyama.scanapp
       vars:
         XCODE_WORKSPACE: "ios/MedicalScan.xcworkspace"
         XCODE_SCHEME: "MedicalScan"
