@@ -7,6 +7,7 @@ workflows:
     environment:
       ios_signing:
         distribution_type: manual
+        bundle_identifier: com.oyama.scanapp
         provisioning_profile: ScanApp Distribution
         certificate: MedicalScan Distribution
       vars:
