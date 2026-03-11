@@ -13,7 +13,7 @@ import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const EMAIL_STORAGE_KEY = '@MedicalScan:defaultEmail';
+const EMAIL_STORAGE_KEY = '@STLscan:defaultEmail';
 
 interface STLFile {
   name: string;
@@ -75,8 +75,8 @@ export default function FilesScreen() {
     try {
       const savedEmail = await AsyncStorage.getItem(EMAIL_STORAGE_KEY);
       await Share.open({
-        title: `MedicalScan - ${file.name}`,
-        subject: `MedicalScan - ${file.name}`,
+        title: `STLscan - ${file.name}`,
+        subject: `STLscan - ${file.name}`,
         message: `3Dスキャンデータ「${file.name}」を送信します。`,
         url: `file://${file.path}`,
         type: 'application/sla',

@@ -12,7 +12,7 @@ import {
 import {SafeAreaView} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const EMAIL_STORAGE_KEY = '@MedicalScan:defaultEmail';
+const EMAIL_STORAGE_KEY = '@STLscan:defaultEmail';
 
 export default function SettingsScreen() {
   const [email, setEmail] = useState('');
