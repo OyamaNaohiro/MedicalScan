@@ -6,10 +6,8 @@ workflows:
       app_store_connect: Codemagic
     environment:
       ios_signing:
-        distribution_type: manual
+        distribution_type: app_store
         bundle_identifier: com.oyama.scanapp
-        provisioning_profile: ScanApp Distribution
-        certificate: MedicalScan Distribution
       vars:
         XCODE_WORKSPACE: "ios/MedicalScan.xcworkspace"
         XCODE_SCHEME: "MedicalScan"
