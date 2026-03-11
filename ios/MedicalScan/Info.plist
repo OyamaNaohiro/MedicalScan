@@ -38,6 +38,8 @@
 	<string>LiDARおよびTrueDepthカメラによる3Dスキャンのためにカメラへのアクセスが必要です。</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>TrueDepthカメラによる顔スキャンのためにFace IDセンサーへのアクセスが必要です。</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UILaunchStoryboardName</key>
