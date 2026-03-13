@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -21,23 +21,7 @@ export default function ScanScreen() {
   const [phase, setPhase] = useState<ScanPhase>('select');
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [showMesh, setShowMesh] = useState(true);
-  const [lidarAvailable, setLidarAvailable] = useState<boolean | null>(null);
-  const [trueDepthAvailable, setTrueDepthAvailable] = useState<boolean>(false);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('lidar');
-
-  useEffect(() => {
-    Promise.all([
-      LiDARScanner.isLiDARAvailable(),
-      LiDARScanner.isTrueDepthAvailable(),
-    ]).then(([lidar, trueDepth]) => {
-      setLidarAvailable(lidar);
-      setTrueDepthAvailable(trueDepth);
-      // Default to trueDepth if lidar not available
-      if (!lidar && trueDepth) {
-        setScannerMode('trueDepth');
-      }
-    });
-  }, []);
 
   // Reset to selection screen every time this tab is focused
   useFocusEffect(
@@ -98,35 +82,6 @@ export default function ScanScreen() {
     }
   }, [scanState]);
 
-  // Loading state
-  if (lidarAvailable === null) {
-    return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#007aff" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Neither sensor available
-  if (!lidarAvailable && !trueDepthAvailable) {
-    return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centerContainer}>
-          <Text style={styles.unavailableIcon}>{'📱'}</Text>
-          <Text style={styles.unavailableTitle}>スキャン非対応デバイス</Text>
-          <Text style={styles.unavailableText}>
-            このデバイスはLiDARまたはTrueDepthカメラを搭載していません。
-          </Text>
-          <Text style={styles.unavailableHint}>
-            ファイル画面と設定画面は引き続き使用できます
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   // ─── Phase: select ─────────────────────────────────────────────
   if (phase === 'select') {
     return (
@@ -137,39 +92,36 @@ export default function ScanScreen() {
         </Text>
 
         <View style={styles.modeCards}>
-          {lidarAvailable && (
-            <TouchableOpacity
+          <TouchableOpacity
+            style={[
+              styles.modeCard,
+              scannerMode === 'lidar' && styles.modeCardActive,
+            ]}
+            onPress={() => setScannerMode('lidar')}>
+            <Text style={styles.modeCardIcon}>{'📡'}</Text>
+            <Text
               style={[
-                styles.modeCard,
-                scannerMode === 'lidar' && styles.modeCardActive,
-              ]}
-              onPress={() => setScannerMode('lidar')}>
-              <Text style={styles.modeCardIcon}>{'📡'}</Text>
-              <Text
-                style={[
-                  styles.modeCardTitle,
-                  scannerMode === 'lidar' && styles.modeCardTitleActive,
-                ]}>
-                LiDAR
-              </Text>
-              <Text style={styles.modeCardDesc}>
-                環境・物体の高精度3Dスキャン{'\n'}iPhone 12 Pro以降
-              </Text>
-              {scannerMode === 'lidar' && (
-                <View style={styles.modeCardCheck}>
-                  <Text style={styles.modeCardCheckText}>{'✓'}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
+                styles.modeCardTitle,
+                scannerMode === 'lidar' && styles.modeCardTitleActive,
+              ]}>
+              LiDAR
+            </Text>
+            <Text style={styles.modeCardDesc}>
+              環境・物体の高精度3Dスキャン{'\n'}iPhone 12 Pro以降
+            </Text>
+            {scannerMode === 'lidar' && (
+              <View style={styles.modeCardCheck}>
+                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-          {trueDepthAvailable && (
-            <TouchableOpacity
-              style={[
-                styles.modeCard,
-                scannerMode === 'trueDepth' && styles.modeCardActive,
-              ]}
-              onPress={() => setScannerMode('trueDepth')}>
+          <TouchableOpacity
+            style={[
+              styles.modeCard,
+              scannerMode === 'trueDepth' && styles.modeCardActive,
+            ]}
+            onPress={() => setScannerMode('trueDepth')}>
               <Text style={styles.modeCardIcon}>{'👤'}</Text>
               <Text
                 style={[
@@ -186,8 +138,7 @@ export default function ScanScreen() {
                   <Text style={styles.modeCardCheckText}>{'✓'}</Text>
                 </View>
               )}
-            </TouchableOpacity>
-          )}
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
