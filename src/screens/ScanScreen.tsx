@@ -9,11 +9,8 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
-import {LiDARScannerView} from '../native/LiDARScannerView';
-import LiDARScanner, {ScannerMode} from '../native/LiDARScanner';
+import {LiDARScannerView, ScannerMode, ScanEventPayload} from '../native/LiDARScannerView';
 
-// Phase 'select': show mode selection UI, no camera
-// Phase 'active': camera is rendered, user controls scan
 type ScanPhase = 'select' | 'active';
 type ScanState = 'idle' | 'scanning' | 'exporting';
 
@@ -22,81 +19,65 @@ export default function ScanScreen() {
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [showMesh, setShowMesh] = useState(true);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('lidar');
+  const [exportFilename, setExportFilename] = useState('');
 
-  // Reset to selection screen every time this tab is focused
+  // Reset to selection screen on tab blur
   useFocusEffect(
     useCallback(() => {
       return () => {
-        // Tab lost focus — stop any ongoing scan
-        LiDARScanner.stopScan().catch(() => {});
         setScanState('idle');
         setPhase('select');
+        setExportFilename('');
       };
     }, []),
   );
 
-  // When leaving active phase, stop any ongoing scan
-  const handleBackToSelect = useCallback(async () => {
-    if (scanState === 'scanning') {
-      try {
-        await LiDARScanner.stopScan();
-      } catch {}
-    }
+  const handleScanEvent = useCallback(
+    (event: {nativeEvent: ScanEventPayload}) => {
+      const {nativeEvent} = event;
+      if (nativeEvent.type === 'exported') {
+        setScanState('idle');
+        Alert.alert('保存完了', `STLファイルを保存しました:\n${nativeEvent.path}`);
+        setExportFilename('');
+      } else if (nativeEvent.type === 'error') {
+        setScanState('idle');
+        Alert.alert('エラー', nativeEvent.message);
+        setExportFilename('');
+      }
+    },
+    [],
+  );
+
+  const handleBackToSelect = useCallback(() => {
     setScanState('idle');
     setPhase('select');
-  }, [scanState]);
-
-  const handleStartScan = useCallback(async () => {
-    try {
-      setScanState('scanning');
-      await LiDARScanner.startScan(scannerMode);
-    } catch (error: any) {
-      setScanState('idle');
-      Alert.alert('エラー', error.message || 'スキャンを開始できませんでした');
-    }
-  }, [scannerMode]);
-
-  const handleStopScan = useCallback(async () => {
-    try {
-      await LiDARScanner.stopScan();
-      setScanState('idle');
-    } catch (error: any) {
-      Alert.alert('エラー', error.message || 'スキャンを停止できませんでした');
-    }
+    setExportFilename('');
   }, []);
 
-  const handleExport = useCallback(async () => {
-    if (scanState === 'scanning') {
-      await LiDARScanner.stopScan();
-    }
+  const handleStartScan = useCallback(() => {
+    setScanState('scanning');
+  }, []);
+
+  const handleStopScan = useCallback(() => {
+    setScanState('idle');
+  }, []);
+
+  const handleExport = useCallback(() => {
     setScanState('exporting');
-    try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `scan_${timestamp}`;
-      const filePath = await LiDARScanner.exportToSTL(filename);
-      setScanState('idle');
-      Alert.alert('保存完了', `STLファイルを保存しました:\n${filePath}`);
-    } catch (error: any) {
-      setScanState('idle');
-      Alert.alert('エラー', error.message || 'STLのエクスポートに失敗しました');
-    }
-  }, [scanState]);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    setExportFilename(`scan_${timestamp}`);
+  }, []);
 
   // ─── Phase: select ─────────────────────────────────────────────
   if (phase === 'select') {
     return (
       <SafeAreaView style={styles.selectContainer} edges={['top', 'bottom']}>
         <Text style={styles.selectTitle}>スキャンモードを選択</Text>
-        <Text style={styles.selectSubtitle}>
-          使用するカメラを選んでください
-        </Text>
+        <Text style={styles.selectSubtitle}>使用するカメラを選んでください</Text>
 
         <View style={styles.modeCards}>
           <TouchableOpacity
-            style={[
-              styles.modeCard,
-              scannerMode === 'lidar' && styles.modeCardActive,
-            ]}
+            style={[styles.modeCard, scannerMode === 'lidar' && styles.modeCardActive]}
             onPress={() => setScannerMode('lidar')}>
             <Text style={styles.modeCardIcon}>{'📡'}</Text>
             <Text
@@ -117,27 +98,24 @@ export default function ScanScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.modeCard,
-              scannerMode === 'trueDepth' && styles.modeCardActive,
-            ]}
+            style={[styles.modeCard, scannerMode === 'trueDepth' && styles.modeCardActive]}
             onPress={() => setScannerMode('trueDepth')}>
-              <Text style={styles.modeCardIcon}>{'👤'}</Text>
-              <Text
-                style={[
-                  styles.modeCardTitle,
-                  scannerMode === 'trueDepth' && styles.modeCardTitleActive,
-                ]}>
-                TrueDepth
-              </Text>
-              <Text style={styles.modeCardDesc}>
-                顔・近距離オブジェクトのスキャン{'\n'}Face ID搭載機種
-              </Text>
-              {scannerMode === 'trueDepth' && (
-                <View style={styles.modeCardCheck}>
-                  <Text style={styles.modeCardCheckText}>{'✓'}</Text>
-                </View>
-              )}
+            <Text style={styles.modeCardIcon}>{'👤'}</Text>
+            <Text
+              style={[
+                styles.modeCardTitle,
+                scannerMode === 'trueDepth' && styles.modeCardTitleActive,
+              ]}>
+              TrueDepth
+            </Text>
+            <Text style={styles.modeCardDesc}>
+              顔・近距離オブジェクトのスキャン{'\n'}Face ID搭載機種
+            </Text>
+            {scannerMode === 'trueDepth' && (
+              <View style={styles.modeCardCheck}>
+                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -159,9 +137,11 @@ export default function ScanScreen() {
         style={styles.scanner}
         showMeshOverlay={showMesh}
         scannerMode={scannerMode}
+        isScanning={scanState === 'scanning'}
+        exportFilename={exportFilename}
+        onScanEvent={handleScanEvent}
       />
 
-      {/* Back button */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={handleBackToSelect}
@@ -169,7 +149,6 @@ export default function ScanScreen() {
         <Text style={styles.backButtonText}>{'‹ モード選択'}</Text>
       </TouchableOpacity>
 
-      {/* Status badge */}
       <View style={styles.overlay}>
         {scanState === 'scanning' && (
           <View style={styles.statusBadge}>
@@ -185,14 +164,11 @@ export default function ScanScreen() {
         )}
       </View>
 
-      {/* Controls */}
       <View style={styles.controls}>
         <TouchableOpacity
           style={styles.toggleButton}
           onPress={() => setShowMesh(prev => !prev)}>
-          <Text style={styles.toggleText}>
-            メッシュ {showMesh ? 'OFF' : 'ON'}
-          </Text>
+          <Text style={styles.toggleText}>メッシュ {showMesh ? 'OFF' : 'ON'}</Text>
         </TouchableOpacity>
 
         {scanState === 'idle' ? (
@@ -212,10 +188,7 @@ export default function ScanScreen() {
         )}
 
         <TouchableOpacity
-          style={[
-            styles.exportButton,
-            scanState === 'exporting' && styles.disabledButton,
-          ]}
+          style={[styles.exportButton, scanState === 'exporting' && styles.disabledButton]}
           onPress={handleExport}
           disabled={scanState === 'exporting'}>
           <Text style={styles.exportText}>STL保存</Text>
@@ -226,19 +199,10 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ─── Shared ───────────────────────────────────────────────────
   container: {
     flex: 1,
     backgroundColor: '#000',
   },
-  centerContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    backgroundColor: '#1a1a2e',
-  },
-  // ─── Select phase ─────────────────────────────────────────────
   selectContainer: {
     flex: 1,
     backgroundColor: '#1a1a2e',
@@ -324,7 +288,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  // ─── Active phase ──────────────────────────────────────────────
   scanner: {
     flex: 1,
   },
@@ -415,29 +378,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',
-  },
-  // ─── Unavailable ───────────────────────────────────────────────
-  unavailableIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  unavailableTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 12,
-  },
-  unavailableText: {
-    fontSize: 15,
-    color: '#aaa',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 4,
-  },
-  unavailableHint: {
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 16,
   },
 });
