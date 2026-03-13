@@ -1,12 +1,3 @@
+// STLViewerViewManager is now implemented in STLViewerBridge.m (pure ObjC)
+// to avoid the iOS 26 NSInvocation + Swift bridge crash in ObjCTurboModule.
 import Foundation
-
-@objc(STLViewerViewManager)
-class STLViewerViewManager: RCTViewManager {
-  override func view() -> UIView! {
-    return STLViewerView()
-  }
-
-  override static func requiresMainQueueSetup() -> Bool {
-    return true
-  }
-}

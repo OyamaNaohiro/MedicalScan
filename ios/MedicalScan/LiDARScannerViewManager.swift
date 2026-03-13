@@ -1,14 +1,3 @@
+// LiDARScannerViewManager is now implemented in LiDARScannerViewManager.m (pure ObjC)
+// to avoid the iOS 26 NSInvocation + Swift bridge crash in ObjCTurboModule.
 import Foundation
-import UIKit
-
-@objc(LiDARScannerViewManager)
-class LiDARScannerViewManager: RCTViewManager {
-
-  override func view() -> UIView! {
-    return LiDARScannerView()
-  }
-
-  override static func requiresMainQueueSetup() -> Bool {
-    return true
-  }
-}
