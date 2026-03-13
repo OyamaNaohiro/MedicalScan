@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Modal,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {STLViewerView} from '../native/STLViewerView';
 
 const EMAIL_STORAGE_KEY = '@STLscan:defaultEmail';
 
@@ -24,6 +26,7 @@ interface STLFile {
 
 export default function FilesScreen() {
   const [files, setFiles] = useState<STLFile[]>([]);
+  const [viewingFile, setViewingFile] = useState<STLFile | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -110,7 +113,10 @@ export default function FilesScreen() {
   };
 
   const renderItem = ({item}: {item: STLFile}) => (
-    <View style={styles.fileItem}>
+    <TouchableOpacity
+      style={styles.fileItem}
+      onPress={() => setViewingFile(item)}
+      activeOpacity={0.7}>
       <View style={styles.fileInfo}>
         <Text style={styles.fileName}>{item.name}</Text>
         <Text style={styles.fileMeta}>
@@ -129,7 +135,7 @@ export default function FilesScreen() {
           <Text style={styles.deleteText}>削除</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -149,6 +155,51 @@ export default function FilesScreen() {
           contentContainerStyle={styles.list}
         />
       )}
+
+      {/* STL Viewer Modal */}
+      <Modal
+        visible={viewingFile !== null}
+        animationType="slide"
+        onRequestClose={() => setViewingFile(null)}>
+        <SafeAreaView style={styles.viewerContainer}>
+          <View style={styles.viewerHeader}>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              {viewingFile?.name}
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setViewingFile(null)}>
+              <Text style={styles.closeButtonText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.viewerHint}>
+            ドラッグで回転 / ピンチでズーム
+          </Text>
+          {viewingFile && (
+            <STLViewerView
+              style={styles.viewer}
+              stlFilePath={viewingFile.path}
+            />
+          )}
+          <View style={styles.viewerFooter}>
+            <TouchableOpacity
+              style={styles.shareButtonLarge}
+              onPress={() => viewingFile && handleShare(viewingFile)}>
+              <Text style={styles.shareText}>送信</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteButtonLarge}
+              onPress={() => {
+                if (viewingFile) {
+                  setViewingFile(null);
+                  handleDelete(viewingFile);
+                }
+              }}>
+              <Text style={styles.deleteText}>削除</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -229,5 +280,65 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  // Viewer modal
+  viewerContainer: {
+    flex: 1,
+    backgroundColor: '#111',
+  },
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#1c1c1e',
+  },
+  viewerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  closeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  viewerHint: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 12,
+    paddingVertical: 6,
+    backgroundColor: '#111',
+  },
+  viewer: {
+    flex: 1,
+  },
+  viewerFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 20,
+    backgroundColor: '#1c1c1e',
+  },
+  shareButtonLarge: {
+    flex: 1,
+    backgroundColor: '#007aff',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  deleteButtonLarge: {
+    flex: 1,
+    backgroundColor: '#ff3b30',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
   },
 });
