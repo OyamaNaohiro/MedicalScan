@@ -47,9 +47,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window != nil {
-      startARSession()
-    } else {
+    // AR session is started explicitly via LiDARScannerModule.startScan(),
+    // not automatically on view attachment, to avoid crashes on launch.
+    if window == nil {
       pauseARSession()
     }
   }

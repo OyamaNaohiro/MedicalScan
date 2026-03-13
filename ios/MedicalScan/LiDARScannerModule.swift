@@ -43,18 +43,30 @@ class LiDARScannerModule: NSObject {
       self.isScanning = true
       self.currentMode = scanMode
 
-      if scanMode == "trueDepth" {
-        let config = ARFaceTrackingConfiguration()
-        config.isLightEstimationEnabled = true
-        session.run(config, options: [.resetTracking, .removeExistingAnchors])
-      } else {
-        let config = ARWorldTrackingConfiguration()
-        config.sceneReconstruction = .mesh
-        config.environmentTexturing = .automatic
-        session.run(config, options: [.resetTracking, .removeExistingAnchors])
+      var runError: String? = nil
+      let exception = catchException {
+        if scanMode == "trueDepth" {
+          let config = ARFaceTrackingConfiguration()
+          config.isLightEstimationEnabled = true
+          session.run(config, options: [.resetTracking, .removeExistingAnchors])
+        } else {
+          let config = ARWorldTrackingConfiguration()
+          config.sceneReconstruction = .mesh
+          config.environmentTexturing = .automatic
+          session.run(config, options: [.resetTracking, .removeExistingAnchors])
+        }
       }
 
-      resolve(nil)
+      if let ex = exception {
+        self.isScanning = false
+        runError = ex.reason ?? "ARKit session failed to start"
+      }
+
+      if let err = runError {
+        reject("ARKIT_ERROR", err, nil)
+      } else {
+        resolve(nil)
+      }
     }
   }
 
@@ -103,15 +115,29 @@ class LiDARScannerModule: NSObject {
   @objc
   func isLiDARAvailable(_ resolve: @escaping RCTPromiseResolveBlock,
                          rejecter reject: @escaping RCTPromiseRejectBlock) {
-    let available = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
-    resolve(available)
+    var available = false
+    let exception = catchException {
+      available = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
+    }
+    if exception != nil {
+      resolve(false)
+    } else {
+      resolve(available)
+    }
   }
 
   @objc
   func isTrueDepthAvailable(_ resolve: @escaping RCTPromiseResolveBlock,
                               rejecter reject: @escaping RCTPromiseRejectBlock) {
-    let available = ARFaceTrackingConfiguration.isSupported
-    resolve(available)
+    var available = false
+    let exception = catchException {
+      available = ARFaceTrackingConfiguration.isSupported
+    }
+    if exception != nil {
+      resolve(false)
+    } else {
+      resolve(available)
+    }
   }
 
   // MARK: - LiDAR Mesh → STL
