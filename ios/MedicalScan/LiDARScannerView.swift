@@ -252,13 +252,33 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       cx = Float(dw) / 2.0;  cy = Float(dh) / 2.0
     }
 
+    // ── Foreground detection: depth histogram with stride-8 pass ──────────
+    // Find the dominant depth cluster, then only integrate pixels within
+    // ±18 cm of it. This keeps the target object and discards background.
+    let dMin: Float = 0.15, dMax: Float = 0.85
+    let nBins = 14
+    var hist = [Int](repeating: 0, count: nBins)
+    for py8 in Swift.stride(from: 0, to: dh, by: 8) {
+      let r8 = base.advanced(by: py8 * bpr).assumingMemoryBound(to: Float.self)
+      for px8 in Swift.stride(from: 0, to: dw, by: 8) {
+        let d8 = r8[px8]
+        guard d8.isFinite, d8 > dMin, d8 < dMax else { continue }
+        hist[min(nBins - 1, Int((d8 - dMin) / (dMax - dMin) * Float(nBins)))] += 1
+      }
+    }
+    let peakBin  = hist.indices.max(by: { hist[$0] < hist[$1] })!
+    let peakD    = dMin + (Float(peakBin) + 0.5) * (dMax - dMin) / Float(nBins)
+    let filterLo = max(dMin, peakD - 0.18)
+    let filterHi = min(dMax, peakD + 0.18)
+    // ──────────────────────────────────────────────────────────────────────
+
     let step = 3  // sample every 3rd pixel for speed/quality balance
 
     for py in Swift.stride(from: 0, to: dh, by: step) {
       let row = base.advanced(by: py * bpr).assumingMemoryBound(to: Float.self)
       for px in Swift.stride(from: 0, to: dw, by: step) {
         let d = row[px]
-        guard d.isFinite, d > 0.15, d < 0.9 else { continue }
+        guard d.isFinite, d > filterLo, d < filterHi else { continue }
 
         // Back-project to camera space (camera looks in -Z)
         let xc = (Float(px) - cx) * d / fx
@@ -325,7 +345,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     _ voxels: [SIMD3<Int32>: (sum: SIMD3<Float>, count: Int32)],
     filename: String) throws -> String {
 
-    let occupied = Set(voxels.keys)
+    // ── 1. Filter: keep only voxels seen in ≥3 frames (removes noise) ─────
+    let filtered = voxels.filter { $0.value.count >= 3 }
+    let occupied = Set(filtered.keys)
     let hs = voxelSize * 0.5
 
     typealias FaceDef = (offset: SIMD3<Int32>, normal: SIMD3<Float>)
@@ -338,38 +360,85 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       (SIMD3( 0, 0,-1), SIMD3( 0, 0,-1)),
     ]
 
-    var triCount = 0
-    for (key, _) in voxels {
+    // ── 2. Build shared-vertex mesh ────────────────────────────────────────
+    // Face vertices are grid-aligned (based on integer key, not centroid)
+    // so adjacent cube faces share exact float positions → perfect dedup.
+    var vertPos  = [SIMD3<Float>]()
+    var vertKey  = [SIMD3<Int32>: Int]()   // half-voxel grid index → vertex index
+    var triIdx   = [(Int, Int, Int)]()
+
+    // Convert world pos → half-voxel integer key (exact for grid vertices)
+    let invHS = 1.0 / hs
+    func vkey(_ v: SIMD3<Float>) -> SIMD3<Int32> {
+      SIMD3<Int32>(Int32(round(v.x * invHS)),
+                   Int32(round(v.y * invHS)),
+                   Int32(round(v.z * invHS)))
+    }
+    func addVert(_ v: SIMD3<Float>) -> Int {
+      let k = vkey(v)
+      if let i = vertKey[k] { return i }
+      let i = vertPos.count
+      vertPos.append(v); vertKey[k] = i; return i
+    }
+
+    for (key, _) in filtered {
+      // Use grid-aligned voxel centre (not data centroid) for exact sharing
+      let vc = SIMD3<Float>((Float(key.x) + 0.5) * voxelSize,
+                             (Float(key.y) + 0.5) * voxelSize,
+                             (Float(key.z) + 0.5) * voxelSize)
       for f in faceDefs {
         let nk = SIMD3<Int32>(key.x + f.offset.x, key.y + f.offset.y, key.z + f.offset.z)
-        if !occupied.contains(nk) { triCount += 2 }
+        guard !occupied.contains(nk) else { continue }
+        let fc = vc + f.normal * hs
+        let (u, v) = perpVectors(f.normal)
+        let ia = addVert(fc + (u + v) * hs),  ib = addVert(fc + (u - v) * hs)
+        let ic = addVert(fc + (-u - v) * hs), id = addVert(fc + (-u + v) * hs)
+        triIdx.append((ia, ib, ic))
+        triIdx.append((ia, ic, id))
       }
     }
 
-    guard triCount > 0 else {
+    guard !triIdx.isEmpty else {
       throw NSError(domain: "Scan", code: 2, userInfo: [
         NSLocalizedDescriptionKey: "メッシュを生成できませんでした。スキャンデータが少なすぎます。"])
     }
 
+    // ── 3. Taubin smoothing (λ/μ alternating — no volume shrinkage) ───────
+    var adjacency = [Set<Int>](repeating: [], count: vertPos.count)
+    for (i0, i1, i2) in triIdx {
+      adjacency[i0].insert(i1); adjacency[i0].insert(i2)
+      adjacency[i1].insert(i0); adjacency[i1].insert(i2)
+      adjacency[i2].insert(i0); adjacency[i2].insert(i1)
+    }
+    func smoothStep(factor: Float) {
+      var next = vertPos
+      for i in 0..<vertPos.count {
+        guard !adjacency[i].isEmpty else { continue }
+        let avg = adjacency[i].reduce(SIMD3<Float>.zero) { $0 + vertPos[$1] }
+                  / Float(adjacency[i].count)
+        next[i] = vertPos[i] + factor * (avg - vertPos[i])
+      }
+      vertPos = next
+    }
+    let lambda: Float = 0.5, mu: Float = -0.53
+    for _ in 0..<4 {          // 4 Taubin iterations
+      smoothStep(factor: lambda)
+      smoothStep(factor: mu)
+    }
+
+    // ── 4. Write binary STL with recomputed normals ────────────────────────
+    let triCount = triIdx.count
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
-    bytes[80] = UInt8(tc & 0xFF);       bytes[81] = UInt8((tc >> 8)  & 0xFF)
+    bytes[80] = UInt8(tc & 0xFF);         bytes[81] = UInt8((tc >> 8)  & 0xFF)
     bytes[82] = UInt8((tc >> 16) & 0xFF); bytes[83] = UInt8((tc >> 24) & 0xFF)
     var off = 84
 
-    for (key, entry) in voxels {
-      let center = entry.sum / Float(entry.count)
-      for f in faceDefs {
-        let nk = SIMD3<Int32>(key.x + f.offset.x, key.y + f.offset.y, key.z + f.offset.z)
-        guard !occupied.contains(nk) else { continue }
-
-        let fc   = center + f.normal * hs
-        let (u, v) = perpVectors(f.normal)
-        let a = fc + (u + v) * hs;   let b = fc + (u - v) * hs
-        let c = fc + (-u - v) * hs;  let d = fc + (-u + v) * hs
-        writeTriangle(&bytes, &off, f.normal, a, b, c)
-        writeTriangle(&bytes, &off, f.normal, a, c, d)
-      }
+    for (i0, i1, i2) in triIdx {
+      let v0 = vertPos[i0], v1 = vertPos[i1], v2 = vertPos[i2]
+      var n = simd_cross(v1 - v0, v2 - v0)
+      let len = simd_length(n); if len > 0 { n /= len }
+      writeTriangle(&bytes, &off, n, v0, v1, v2)
     }
 
     let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
