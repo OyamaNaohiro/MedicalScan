@@ -70,17 +70,15 @@ class STLViewerView: UIView {
     let asset = MDLAsset(url: url)
     guard let mdlMesh = asset.object(at: 0) as? MDLMesh else { return }
 
-    guard let geometry = try? SCNGeometry(mdlMesh: mdlMesh) else { return }
+    let meshNode = SCNNode(mdlObject: mdlMesh)
+    meshNode.name = "stlMesh"
 
     let material = SCNMaterial()
     material.diffuse.contents = UIColor(red: 0.35, green: 0.75, blue: 1.0, alpha: 1.0)
     material.lightingModel = .physicallyBased
     material.roughness.contents = Float(0.6)
     material.metalness.contents = Float(0.1)
-    geometry.materials = [material]
-
-    let meshNode = SCNNode(geometry: geometry)
-    meshNode.name = "stlMesh"
+    meshNode.geometry?.materials = [material]
 
     // Center and normalize scale
     let (min, max) = meshNode.boundingBox
