@@ -1,8 +1,9 @@
 #import <React/RCTViewManager.h>
-#import "MedicalScan-Swift.h"
+#import "STLViewerNativeView.h"
 
-// Pure ObjC implementation - avoids iOS 26 NSInvocation+Swift bridge crash
-// in ObjCTurboModule::performVoidMethodInvocation.
+// Pure ObjC implementation - avoids iOS 26 NSInvocation+Swift bridge crash.
+// NSInvocation calls pure ObjC setters on STLViewerNativeView,
+// which forwards to Swift via direct ObjC messaging (safe on iOS 26).
 @interface STLViewerViewManager : RCTViewManager
 @end
 
@@ -11,7 +12,7 @@
 RCT_EXPORT_MODULE()
 
 - (UIView *)view {
-  return [[STLViewerView alloc] init];
+  return [[STLViewerNativeView alloc] init];
 }
 
 + (BOOL)requiresMainQueueSetup {
