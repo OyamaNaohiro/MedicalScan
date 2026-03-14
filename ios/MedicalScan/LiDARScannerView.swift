@@ -14,8 +14,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
-  private var worldVoxels: [SIMD3<Int32>: (sum: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.009        // 9 mm per voxel (absorbs tracking jitter)
+  private var worldVoxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)] = [:]
+  private let voxelSize: Float = 0.006        // 6 mm per voxel
   private var pointCloudNode: SCNNode?
   private var fusedFrameCount   = 0
   private var lastVisualizeCount = 0
@@ -295,8 +295,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
           Int32(floor(wp.y / voxelSize)),
           Int32(floor(wp.z / voxelSize)))
 
+        // Temporal smoothing: EMA blend + jitter rejection
+        let rejectDist = voxelSize * 2.5
         if var e = worldVoxels[key] {
-          e.sum += wp; e.count += 1
+          guard simd_distance(wp, e.center) < rejectDist else { continue }
+          e.center += 0.2 * (wp - e.center)  // EMA: 20% new, 80% stable
+          e.count  += 1
           worldVoxels[key] = e
         } else {
           worldVoxels[key] = (wp, 1)
@@ -309,7 +313,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     lastVisualizeCount = fusedFrameCount
 
     // Snapshot up to 40 k points for visualization
-    let pts = Array(worldVoxels.values.prefix(40000)).map { $0.sum / Float($0.count) }
+    let pts = Array(worldVoxels.values.prefix(40000)).map { $0.center }
     DispatchQueue.main.async { [weak self] in self?.updatePointCloud(pts) }
   }
 
@@ -342,7 +346,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - Voxel Surface → STL Export
 
   private func voxelsToSTL(
-    _ voxels: [SIMD3<Int32>: (sum: SIMD3<Float>, count: Int32)],
+    _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)],
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥3 frames (removes noise) ─────
