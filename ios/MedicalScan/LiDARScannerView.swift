@@ -15,7 +15,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
   private var worldVoxels: [SIMD3<Int32>: (sum: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.005        // 5 mm per voxel
+  private let voxelSize: Float = 0.009        // 9 mm per voxel (absorbs tracking jitter)
   private var pointCloudNode: SCNNode?
   private var fusedFrameCount   = 0
   private var lastVisualizeCount = 0
@@ -346,7 +346,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥3 frames (removes noise) ─────
-    let filtered = voxels.filter { $0.value.count >= 3 }
+    let filtered = voxels.filter { $0.value.count >= 5 }
     let occupied = Set(filtered.keys)
     let hs = voxelSize * 0.5
 
@@ -403,7 +403,31 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         NSLocalizedDescriptionKey: "メッシュを生成できませんでした。スキャンデータが少なすぎます。"])
     }
 
-    // ── 3. Taubin smoothing (λ/μ alternating — no volume shrinkage) ───────
+    // ── 3. Midpoint subdivision (1 level: each triangle → 4) ─────────
+    var midCache = [SIMD3<Int32>: Int]()
+    func midpoint(_ a: Int, _ b: Int) -> Int {
+      let lo = min(a, b), hi = max(a, b)
+      let mk = SIMD3<Int32>(Int32(lo), Int32(hi), 0)
+      if let i = midCache[mk] { return i }
+      let m = (vertPos[a] + vertPos[b]) * 0.5
+      let i = vertPos.count
+      vertPos.append(m); midCache[mk] = i; return i
+    }
+    var subdTri = [(Int, Int, Int)]()
+    subdTri.reserveCapacity(triIdx.count * 4)
+    for (i0, i1, i2) in triIdx {
+      let m01 = midpoint(i0, i1)
+      let m12 = midpoint(i1, i2)
+      let m20 = midpoint(i2, i0)
+      subdTri.append((i0,  m01, m20))
+      subdTri.append((i1,  m12, m01))
+      subdTri.append((i2,  m20, m12))
+      subdTri.append((m01, m12, m20))
+    }
+    triIdx = subdTri
+    // ────────────────────────────────────────────────────────────────────
+
+    // ── 4. Taubin smoothing (λ/μ alternating — no volume shrinkage) ───────
     var adjacency = [Set<Int>](repeating: [], count: vertPos.count)
     for (i0, i1, i2) in triIdx {
       adjacency[i0].insert(i1); adjacency[i0].insert(i2)
@@ -421,12 +445,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<4 {          // 4 Taubin iterations
+    for _ in 0..<8 {          // 8 Taubin iterations
       smoothStep(factor: lambda)
       smoothStep(factor: mu)
     }
 
-    // ── 4. Write binary STL with recomputed normals ────────────────────────
+    // ── 5. Write binary STL with recomputed normals ────────────────────────
     let triCount = triIdx.count
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
