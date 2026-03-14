@@ -29,10 +29,10 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         collectedMeshAnchors = []
         collectedFaceAnchors = []
         startARSession()
-        onScanEvent?(["type": "scanStarted"])
+        ScanEventEmitter.emitEvent(["type": "scanStarted"])
       } else {
         pauseARSession()
-        onScanEvent?(["type": "scanStopped"])
+        ScanEventEmitter.emitEvent(["type": "scanStopped"])
       }
     }
   }
@@ -50,26 +50,24 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
           let filePath: String
           if mode == "trueDepth" {
             guard !faceAnchors.isEmpty else {
-              self.onScanEvent?(["type": "error", "message": "No face mesh data captured."])
+              ScanEventEmitter.emitEvent(["type": "error", "message": "No face mesh data captured."])
               return
             }
             filePath = try self.convertFaceMeshToSTL(anchors: faceAnchors, filename: filename)
           } else {
             guard !meshAnchors.isEmpty else {
-              self.onScanEvent?(["type": "error", "message": "No mesh data captured. Run a scan first."])
+              ScanEventEmitter.emitEvent(["type": "error", "message": "No mesh data captured. Run a scan first."])
               return
             }
             filePath = try self.convertMeshToSTL(anchors: meshAnchors, filename: filename)
           }
-          self.onScanEvent?(["type": "exported", "path": filePath])
+          ScanEventEmitter.emitEvent(["type": "exported", "path": filePath])
         } catch {
-          self.onScanEvent?(["type": "error", "message": error.localizedDescription])
+          ScanEventEmitter.emitEvent(["type": "error", "message": error.localizedDescription])
         }
       }
     }
   }
-
-  @objc var onScanEvent: RCTBubblingEventBlock?
 
   // MARK: - Init
 
@@ -110,7 +108,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     guard !isSessionRunning else { return }
     if scannerMode == "trueDepth" {
       guard ARFaceTrackingConfiguration.isSupported else {
-        onScanEvent?(["type": "error", "message": "TrueDepth camera is not available on this device."])
+        ScanEventEmitter.emitEvent(["type": "error", "message": "TrueDepth camera is not available on this device."])
         return
       }
       let config = ARFaceTrackingConfiguration()
@@ -118,7 +116,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
     } else {
       guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
-        onScanEvent?(["type": "error", "message": "LiDAR scanner is not available on this device."])
+        ScanEventEmitter.emitEvent(["type": "error", "message": "LiDAR scanner is not available on this device."])
         return
       }
       let config = ARWorldTrackingConfiguration()

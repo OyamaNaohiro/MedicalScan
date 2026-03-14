@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
-import {LiDARScannerView, ScannerMode, ScanEventPayload} from '../native/LiDARScannerView';
+import {LiDARScannerView, ScannerMode} from '../native/LiDARScannerView';
+import {addScanEventListener} from '../native/ScanEventEmitter';
 
 type ScanPhase = 'select' | 'active';
 type ScanState = 'idle' | 'scanning' | 'exporting';
@@ -32,21 +33,20 @@ export default function ScanScreen() {
     }, []),
   );
 
-  const handleScanEvent = useCallback(
-    (event: {nativeEvent: ScanEventPayload}) => {
-      const {nativeEvent} = event;
-      if (nativeEvent.type === 'exported') {
+  useEffect(() => {
+    const subscription = addScanEventListener(event => {
+      if (event.type === 'exported') {
         setScanState('idle');
-        Alert.alert('保存完了', `STLファイルを保存しました:\n${nativeEvent.path}`);
+        Alert.alert('保存完了', `STLファイルを保存しました:\n${event.path}`);
         setExportFilename('');
-      } else if (nativeEvent.type === 'error') {
+      } else if (event.type === 'error') {
         setScanState('idle');
-        Alert.alert('エラー', nativeEvent.message);
+        Alert.alert('エラー', event.message);
         setExportFilename('');
       }
-    },
-    [],
-  );
+    });
+    return () => subscription.remove();
+  }, []);
 
   const handleBackToSelect = useCallback(() => {
     setScanState('idle');
@@ -139,7 +139,6 @@ export default function ScanScreen() {
         scannerMode={scannerMode}
         isScanning={scanState === 'scanning'}
         exportFilename={exportFilename}
-        onScanEvent={handleScanEvent}
       />
 
       <TouchableOpacity

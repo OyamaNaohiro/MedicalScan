@@ -7,3 +7,4 @@
 #import <React/RCTViewManager.h>
 #import <React/RCTEventEmitter.h>
 #import "ExceptionCatcher.h"
+#import "ScanEventEmitter.h"
