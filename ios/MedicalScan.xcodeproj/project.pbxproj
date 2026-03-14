@@ -11,6 +11,17 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		AA000001B368108700A75B9A /* LiDARScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002B368108700A75B9A /* LiDARScannerView.swift */; };
+		AA000003B368108700A75B9A /* LiDARScannerViewManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000004B368108700A75B9A /* LiDARScannerViewManager.swift */; };
+		AA000005B368108700A75B9A /* LiDARScannerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000006B368108700A75B9A /* LiDARScannerModule.swift */; };
+		AA000007B368108700A75B9A /* STLViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000008B368108700A75B9A /* STLViewerView.swift */; };
+		AA000009B368108700A75B9A /* STLViewerViewManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000AB368108700A75B9A /* STLViewerViewManager.swift */; };
+		AA00000BB368108700A75B9A /* LiDARScannerViewManager.m in Sources */ = {isa = PBXBuildFile; fileRef = AA00000CB368108700A75B9A /* LiDARScannerViewManager.m */; };
+		AA00000DB368108700A75B9A /* LiDARScannerNativeView.m in Sources */ = {isa = PBXBuildFile; fileRef = AA00000EB368108700A75B9A /* LiDARScannerNativeView.m */; };
+		AA00000FB368108700A75B9A /* STLViewerBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000010B368108700A75B9A /* STLViewerBridge.m */; };
+		AA000011B368108700A75B9A /* STLViewerNativeView.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000012B368108700A75B9A /* STLViewerNativeView.m */; };
+		AA000013B368108700A75B9A /* ScanEventEmitter.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000014B368108700A75B9A /* ScanEventEmitter.m */; };
+		AA000015B368108700A75B9A /* LiDARScannerBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000016B368108700A75B9A /* LiDARScannerBridge.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +35,22 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MedicalScan/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MedicalScan/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		AA000002B368108700A75B9A /* LiDARScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiDARScannerView.swift; path = MedicalScan/LiDARScannerView.swift; sourceTree = "<group>"; };
+		AA000004B368108700A75B9A /* LiDARScannerViewManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiDARScannerViewManager.swift; path = MedicalScan/LiDARScannerViewManager.swift; sourceTree = "<group>"; };
+		AA000006B368108700A75B9A /* LiDARScannerModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiDARScannerModule.swift; path = MedicalScan/LiDARScannerModule.swift; sourceTree = "<group>"; };
+		AA000008B368108700A75B9A /* STLViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = STLViewerView.swift; path = MedicalScan/STLViewerView.swift; sourceTree = "<group>"; };
+		AA00000AB368108700A75B9A /* STLViewerViewManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = STLViewerViewManager.swift; path = MedicalScan/STLViewerViewManager.swift; sourceTree = "<group>"; };
+		AA00000CB368108700A75B9A /* LiDARScannerViewManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = LiDARScannerViewManager.m; path = MedicalScan/LiDARScannerViewManager.m; sourceTree = "<group>"; };
+		AA00000EB368108700A75B9A /* LiDARScannerNativeView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = LiDARScannerNativeView.m; path = MedicalScan/LiDARScannerNativeView.m; sourceTree = "<group>"; };
+		AA000010B368108700A75B9A /* STLViewerBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = STLViewerBridge.m; path = MedicalScan/STLViewerBridge.m; sourceTree = "<group>"; };
+		AA000012B368108700A75B9A /* STLViewerNativeView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = STLViewerNativeView.m; path = MedicalScan/STLViewerNativeView.m; sourceTree = "<group>"; };
+		AA000014B368108700A75B9A /* ScanEventEmitter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ScanEventEmitter.m; path = MedicalScan/ScanEventEmitter.m; sourceTree = "<group>"; };
+		AA000016B368108700A75B9A /* LiDARScannerBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = LiDARScannerBridge.m; path = MedicalScan/LiDARScannerBridge.m; sourceTree = "<group>"; };
+		AA000017B368108700A75B9A /* LiDARScannerNativeView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LiDARScannerNativeView.h; path = MedicalScan/LiDARScannerNativeView.h; sourceTree = "<group>"; };
+		AA000018B368108700A75B9A /* STLViewerNativeView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = STLViewerNativeView.h; path = MedicalScan/STLViewerNativeView.h; sourceTree = "<group>"; };
+		AA000019B368108700A75B9A /* ScanEventEmitter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ScanEventEmitter.h; path = MedicalScan/ScanEventEmitter.h; sourceTree = "<group>"; };
+		AA00001AB368108700A75B9A /* ExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExceptionCatcher.h; path = MedicalScan/ExceptionCatcher.h; sourceTree = "<group>"; };
+		AA00001BB368108700A75B9A /* MedicalScan-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "MedicalScan-Bridging-Header.h"; path = "MedicalScan/MedicalScan-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,6 +70,22 @@
 			children = (
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
+				AA000002B368108700A75B9A /* LiDARScannerView.swift */,
+				AA000004B368108700A75B9A /* LiDARScannerViewManager.swift */,
+				AA000006B368108700A75B9A /* LiDARScannerModule.swift */,
+				AA000008B368108700A75B9A /* STLViewerView.swift */,
+				AA00000AB368108700A75B9A /* STLViewerViewManager.swift */,
+				AA00000CB368108700A75B9A /* LiDARScannerViewManager.m */,
+				AA00000EB368108700A75B9A /* LiDARScannerNativeView.m */,
+				AA000017B368108700A75B9A /* LiDARScannerNativeView.h */,
+				AA000010B368108700A75B9A /* STLViewerBridge.m */,
+				AA000012B368108700A75B9A /* STLViewerNativeView.m */,
+				AA000018B368108700A75B9A /* STLViewerNativeView.h */,
+				AA000014B368108700A75B9A /* ScanEventEmitter.m */,
+				AA000019B368108700A75B9A /* ScanEventEmitter.h */,
+				AA000016B368108700A75B9A /* LiDARScannerBridge.m */,
+				AA00001AB368108700A75B9A /* ExceptionCatcher.h */,
+				AA00001BB368108700A75B9A /* MedicalScan-Bridging-Header.h */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -245,6 +288,17 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				AA000001B368108700A75B9A /* LiDARScannerView.swift in Sources */,
+				AA000003B368108700A75B9A /* LiDARScannerViewManager.swift in Sources */,
+				AA000005B368108700A75B9A /* LiDARScannerModule.swift in Sources */,
+				AA000007B368108700A75B9A /* STLViewerView.swift in Sources */,
+				AA000009B368108700A75B9A /* STLViewerViewManager.swift in Sources */,
+				AA00000BB368108700A75B9A /* LiDARScannerViewManager.m in Sources */,
+				AA00000DB368108700A75B9A /* LiDARScannerNativeView.m in Sources */,
+				AA00000FB368108700A75B9A /* STLViewerBridge.m in Sources */,
+				AA000011B368108700A75B9A /* STLViewerNativeView.m in Sources */,
+				AA000013B368108700A75B9A /* ScanEventEmitter.m in Sources */,
+				AA000015B368108700A75B9A /* LiDARScannerBridge.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,7 +311,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -274,6 +328,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.oyama.stlscan";
 				PRODUCT_NAME = MedicalScan;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "MedicalScan/MedicalScan-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1";
@@ -287,7 +342,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -303,6 +358,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.oyama.stlscan";
 				PRODUCT_NAME = MedicalScan;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "MedicalScan/MedicalScan-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1";
 				VERSIONING_SYSTEM = "apple-generic";

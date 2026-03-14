@@ -16,6 +16,27 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm install
+      - name: Patch RCTTurboModule for iOS 26
+        script: |
+          python3 - << 'PYEOF'
+          import sys
+          path = 'node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm'
+          with open(path, 'r') as f:
+              content = f.read()
+          # Suppress C++ throw inside async void method invocation block.
+          # On iOS 26, [inv invokeWithTarget:] can throw an ObjC exception;
+          # re-throwing it as C++ inside an async block causes std::terminate -> abort.
+          old = 'throw convertNSExceptionToJSError(runtime, exception, std::string{moduleName}, methodNameStr);'
+          new = 'NSLog(@"[iOS26Patch] Suppressed ObjC exception in void TurboModule method: %@", exception); return;'
+          if old in content:
+              content = content.replace(old, new)
+              with open(path, 'w') as f:
+                  f.write(content)
+              print('iOS 26 RCTTurboModule patch applied successfully')
+          else:
+              print('WARNING: Patch target not found in RCTTurboModule.mm - may be already patched or version mismatch')
+              sys.exit(0)
+          PYEOF
       - name: Install CocoaPods
         script: |
           cd ios
