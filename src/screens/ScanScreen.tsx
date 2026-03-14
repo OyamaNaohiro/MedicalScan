@@ -106,12 +106,36 @@ export default function ScanScreen() {
                 styles.modeCardTitle,
                 scannerMode === 'trueDepth' && styles.modeCardTitleActive,
               ]}>
-              TrueDepth
+              TrueDepth（顔）
             </Text>
             <Text style={styles.modeCardDesc}>
-              顔・近距離オブジェクトのスキャン{'\n'}Face ID搭載機種
+              顔の3Dスキャン{'\n'}Face ID搭載機種
             </Text>
             {scannerMode === 'trueDepth' && (
+              <View style={styles.modeCardCheck}>
+                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeCard,
+              scannerMode === 'trueDepthObject' && styles.modeCardActive,
+            ]}
+            onPress={() => setScannerMode('trueDepthObject')}>
+            <Text style={styles.modeCardIcon}>{'🫁'}</Text>
+            <Text
+              style={[
+                styles.modeCardTitle,
+                scannerMode === 'trueDepthObject' && styles.modeCardTitleActive,
+              ]}>
+              TrueDepth（物体）
+            </Text>
+            <Text style={styles.modeCardDesc}>
+              顔以外のオブジェクトの深度スキャン{'\n'}距離15〜120cm推奨
+            </Text>
+            {scannerMode === 'trueDepthObject' && (
               <View style={styles.modeCardCheck}>
                 <Text style={styles.modeCardCheckText}>{'✓'}</Text>
               </View>
@@ -123,7 +147,12 @@ export default function ScanScreen() {
           style={styles.proceedButton}
           onPress={() => setPhase('active')}>
           <Text style={styles.proceedButtonText}>
-            {scannerMode === 'lidar' ? 'LiDAR' : 'TrueDepth'}でスキャン開始
+            {scannerMode === 'lidar'
+              ? 'LiDAR'
+              : scannerMode === 'trueDepthObject'
+              ? 'TrueDepth（物体）'
+              : 'TrueDepth（顔）'}
+            でスキャン開始
           </Text>
         </TouchableOpacity>
       </SafeAreaView>
