@@ -11,15 +11,20 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
   private var sceneView: ARSCNView!
   private var isSessionRunning = false
   private var collectedMeshAnchors: [ARMeshAnchor] = []
-  private var collectedFaceAnchors: [ARFaceAnchor] = []
 
   // MARK: - AVFoundation path (trueDepthObject)
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
   private var depthDataOutput: AVCaptureDepthDataOutput?
   private let captureQueue = DispatchQueue(label: "com.medicalscan.truedepth", qos: .userInitiated)
-  private var collectedDepthSamples: [(AVDepthData, AVCameraCalibrationData?)] = []
-  private let maxDepthSamples = 60
+  private var depthOverlayView: UIImageView?
+
+  // Temporal fusion buffers (written on captureQueue)
+  private var accumulatedSum: [Float] = []
+  private var accumulatedCount: [Int32] = []
+  private var depthW = 0, depthH = 0
+  private var accumulatedCalibration: AVCameraCalibrationData?
+  private var frameCount = 0
 
   // MARK: - React Props
 
@@ -27,9 +32,11 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
 
   @objc var scannerMode: String = "lidar" {
     didSet {
-      guard scannerMode != oldValue, isSessionRunning else { return }
-      pauseARSession()
-      if isScanning { startARSession() }
+      guard scannerMode != oldValue else { return }
+      if isSessionRunning { pauseARSession() }
+      if window != nil && scannerMode == "trueDepthObject" {
+        startTrueDepthObjectSession()
+      }
     }
   }
 
@@ -38,12 +45,27 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       guard isScanning != oldValue else { return }
       if isScanning {
         collectedMeshAnchors = []
-        collectedFaceAnchors = []
-        collectedDepthSamples = []
-        startARSession()
+        // Clear fusion data before new scan (captureQueue is serial so this runs before new frames)
+        captureQueue.async { [weak self] in
+          guard let self = self else { return }
+          self.accumulatedSum = []
+          self.accumulatedCount = []
+          self.depthW = 0; self.depthH = 0
+          self.accumulatedCalibration = nil
+          self.frameCount = 0
+        }
+        DispatchQueue.main.async { [weak self] in
+          self?.depthOverlayView?.image = nil
+        }
+        if scannerMode != "trueDepthObject" {
+          startARSession()
+        }
         ScanEventEmitter.emitEvent(["type": "scanStarted"])
       } else {
-        pauseARSession()
+        if scannerMode != "trueDepthObject" {
+          pauseARSession()
+        }
+        // For trueDepthObject: keep preview running, just stop collecting
         ScanEventEmitter.emitEvent(["type": "scanStopped"])
       }
     }
@@ -55,34 +77,45 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       let filename = exportFilename
       let mode = scannerMode
       let meshAnchors = collectedMeshAnchors
-      let faceAnchors = collectedFaceAnchors
-      let depthSamples = collectedDepthSamples
-      DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-        guard let self = self else { return }
-        do {
-          let filePath: String
-          if mode == "trueDepth" {
-            guard !faceAnchors.isEmpty else {
-              ScanEventEmitter.emitEvent(["type": "error", "message": "顔メッシュデータがありません。"])
-              return
+
+      if mode == "trueDepthObject" {
+        // Copy accumulated arrays safely from captureQueue (ensures no in-flight writes)
+        captureQueue.async { [weak self] in
+          guard let self = self else { return }
+          let sumCopy = self.accumulatedSum
+          let cntCopy = self.accumulatedCount
+          let w = self.depthW, h = self.depthH
+          let cal = self.accumulatedCalibration
+          DispatchQueue.global(qos: .userInitiated).async {
+            do {
+              guard !sumCopy.isEmpty else {
+                ScanEventEmitter.emitEvent(["type": "error",
+                  "message": "深度データがありません。スキャンを実行してください。"])
+                return
+              }
+              let path = try self.convertFusedDepthToSTL(
+                sum: sumCopy, count: cntCopy, width: w, height: h,
+                calibration: cal, filename: filename)
+              ScanEventEmitter.emitEvent(["type": "exported", "path": path])
+            } catch {
+              ScanEventEmitter.emitEvent(["type": "error", "message": error.localizedDescription])
             }
-            filePath = try self.convertFaceMeshToSTL(anchors: faceAnchors, filename: filename)
-          } else if mode == "trueDepthObject" {
-            guard !depthSamples.isEmpty else {
-              ScanEventEmitter.emitEvent(["type": "error", "message": "深度データがありません。スキャンを実行してください。"])
-              return
-            }
-            filePath = try self.convertDepthSamplesToSTL(samples: depthSamples, filename: filename)
-          } else {
-            guard !meshAnchors.isEmpty else {
-              ScanEventEmitter.emitEvent(["type": "error", "message": "メッシュデータがありません。スキャンを実行してください。"])
-              return
-            }
-            filePath = try self.convertMeshToSTL(anchors: meshAnchors, filename: filename)
           }
-          ScanEventEmitter.emitEvent(["type": "exported", "path": filePath])
-        } catch {
-          ScanEventEmitter.emitEvent(["type": "error", "message": error.localizedDescription])
+        }
+      } else {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+          guard let self = self else { return }
+          do {
+            guard !meshAnchors.isEmpty else {
+              ScanEventEmitter.emitEvent(["type": "error",
+                "message": "メッシュデータがありません。スキャンを実行してください。"])
+              return
+            }
+            let path = try self.convertMeshToSTL(anchors: meshAnchors, filename: filename)
+            ScanEventEmitter.emitEvent(["type": "exported", "path": path])
+          } catch {
+            ScanEventEmitter.emitEvent(["type": "error", "message": error.localizedDescription])
+          }
         }
       }
     }
@@ -117,47 +150,35 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window == nil { pauseARSession() }
+    if window == nil {
+      pauseARSession()
+    } else if scannerMode == "trueDepthObject" && !isSessionRunning {
+      startTrueDepthObjectSession()
+    }
   }
 
   // MARK: - Session Management
 
   private func startARSession() {
     guard !isSessionRunning else { return }
-
-    if scannerMode == "trueDepthObject" {
-      startTrueDepthObjectSession()
-
-    } else if scannerMode == "trueDepth" {
-      guard ARFaceTrackingConfiguration.isSupported else {
-        ScanEventEmitter.emitEvent(["type": "error",
-                                    "message": "TrueDepthカメラはこのデバイスでは利用できません。"])
-        return
-      }
-      let config = ARFaceTrackingConfiguration()
-      config.isLightEstimationEnabled = true
-      sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
-      isSessionRunning = true
-
-    } else {
-      guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
-        ScanEventEmitter.emitEvent(["type": "error",
-                                    "message": "LiDARスキャナーはこのデバイスでは利用できません。"])
-        return
-      }
-      let config = ARWorldTrackingConfiguration()
-      config.sceneReconstruction = .mesh
-      config.environmentTexturing = .automatic
-      sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
-      isSessionRunning = true
+    guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
+      ScanEventEmitter.emitEvent(["type": "error",
+        "message": "LiDARスキャナーはこのデバイスでは利用できません。"])
+      return
     }
+    let config = ARWorldTrackingConfiguration()
+    config.sceneReconstruction = .mesh
+    config.environmentTexturing = .automatic
+    sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
+    isSessionRunning = true
   }
 
   private func startTrueDepthObjectSession() {
+    guard !isSessionRunning else { return }
     guard let device = AVCaptureDevice.default(
       .builtInTrueDepthCamera, for: .video, position: .front) else {
       ScanEventEmitter.emitEvent(["type": "error",
-                                  "message": "TrueDepthカメラが利用できません。"])
+        "message": "TrueDepthカメラが利用できません。"])
       return
     }
 
@@ -168,14 +189,18 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     guard let input = try? AVCaptureDeviceInput(device: device),
           session.canAddInput(input) else {
       ScanEventEmitter.emitEvent(["type": "error",
-                                  "message": "カメラ入力の設定に失敗しました。"])
+        "message": "カメラ入力の設定に失敗しました。"])
       return
     }
     session.addInput(input)
 
     let depthOut = AVCaptureDepthDataOutput()
     depthOut.isFilteringEnabled = true
-    guard session.canAddOutput(depthOut) else { return }
+    guard session.canAddOutput(depthOut) else {
+      ScanEventEmitter.emitEvent(["type": "error",
+        "message": "深度データ出力の設定に失敗しました。"])
+      return
+    }
     session.addOutput(depthOut)
     depthOut.setDelegate(self, callbackQueue: captureQueue)
 
@@ -185,11 +210,21 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       guard let self = self else { return }
       self.sceneView.isHidden = true
       self.previewLayer?.removeFromSuperlayer()
+
       let preview = AVCaptureVideoPreviewLayer(session: session)
       preview.videoGravity = .resizeAspectFill
       preview.frame = self.bounds
       self.layer.insertSublayer(preview, at: 0)
       self.previewLayer = preview
+
+      // Depth heatmap overlay (mirrors to match front camera preview)
+      let overlay = UIImageView(frame: self.bounds)
+      overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      overlay.contentMode = .scaleAspectFill
+      overlay.alpha = 0.65
+      overlay.transform = CGAffineTransform(scaleX: -1, y: 1)
+      self.addSubview(overlay)
+      self.depthOverlayView = overlay
     }
 
     captureQueue.async { session.startRunning() }
@@ -208,6 +243,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       DispatchQueue.main.async { [weak self] in
         self?.previewLayer?.removeFromSuperlayer()
         self?.previewLayer = nil
+        self?.depthOverlayView?.removeFromSuperview()
+        self?.depthOverlayView = nil
         self?.sceneView.isHidden = false
       }
     } else {
@@ -222,8 +259,82 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
                        didOutput depthData: AVDepthData,
                        timestamp: CMTime,
                        connection: AVCaptureConnection) {
-    guard isScanning, collectedDepthSamples.count < maxDepthSamples else { return }
-    collectedDepthSamples.append((depthData, depthData.cameraCalibrationData))
+    guard isScanning else { return }
+
+    var data = depthData
+    if data.depthDataType != kCVPixelFormatType_DepthFloat32 {
+      data = data.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
+    }
+
+    let map = data.depthDataMap
+    CVPixelBufferLockBaseAddress(map, .readOnly)
+
+    let w   = CVPixelBufferGetWidth(map)
+    let h   = CVPixelBufferGetHeight(map)
+    let bpr = CVPixelBufferGetBytesPerRow(map)
+
+    // Initialize fusion buffers on first frame
+    if accumulatedSum.isEmpty {
+      depthW = w; depthH = h
+      accumulatedSum   = [Float](repeating: 0, count: w * h)
+      accumulatedCount = [Int32](repeating: 0, count: w * h)
+      accumulatedCalibration = data.cameraCalibrationData
+    }
+
+    let base = CVPixelBufferGetBaseAddress(map)!
+    for y in 0..<h {
+      let row = base.advanced(by: y * bpr).assumingMemoryBound(to: Float.self)
+      for x in 0..<w {
+        let d = row[x]
+        if d.isFinite && d > 0.15 && d < 1.5 {
+          let i = y * w + x
+          accumulatedSum[i]   += d
+          accumulatedCount[i] += 1
+        }
+      }
+    }
+
+    CVPixelBufferUnlockBaseAddress(map, .readOnly)
+
+    // Update overlay every 5 frames (~6 Hz)
+    frameCount += 1
+    if frameCount % 5 == 0, let img = makeOverlayImage() {
+      DispatchQueue.main.async { [weak self] in
+        self?.depthOverlayView?.image = img
+      }
+    }
+  }
+
+  // Depth heatmap: red=close(0.15m), green=mid, blue=far(1.5m)
+  // Alpha builds up as more frames accumulate (solidifies over ~1.5 sec)
+  private func makeOverlayImage() -> UIImage? {
+    let w = depthW, h = depthH
+    guard w > 0, h > 0 else { return nil }
+
+    var rgba = [UInt8](repeating: 0, count: w * h * 4)
+    for i in 0..<(w * h) {
+      let cnt = Int(accumulatedCount[i])
+      guard cnt > 0 else { continue }
+      let d = accumulatedSum[i] / Float(cnt)
+      let t = max(0, min(1, (d - 0.15) / 1.35))  // 0=close, 1=far
+      let r = UInt8(255 * max(0, min(1.0, 1 - t * 2)))
+      let g = UInt8(255 * max(0, min(1.0, 1 - abs(t * 2 - 1))))
+      let b = UInt8(255 * max(0, min(1.0, t * 2 - 1)))
+      let a = UInt8(min(220, cnt * 5))
+      let bi = i * 4
+      rgba[bi] = r; rgba[bi+1] = g; rgba[bi+2] = b; rgba[bi+3] = a
+    }
+
+    guard let provider = CGDataProvider(data: Data(rgba) as CFData) else { return nil }
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let cg = CGImage(
+      width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32,
+      bytesPerRow: w * 4, space: cs,
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+      provider: provider, decode: nil, shouldInterpolate: false,
+      intent: .defaultIntent) else { return nil }
+    // Depth sensor is landscape; rotate to portrait
+    return UIImage(cgImage: cg, scale: 1, orientation: .right)
   }
 
   // MARK: - ARSessionDelegate
@@ -233,9 +344,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     for anchor in anchors {
       if let meshAnchor = anchor as? ARMeshAnchor {
         collectedMeshAnchors.append(meshAnchor)
-      } else if let faceAnchor = anchor as? ARFaceAnchor {
-        collectedFaceAnchors.removeAll { $0.identifier == faceAnchor.identifier }
-        collectedFaceAnchors.append(faceAnchor)
       }
     }
   }
@@ -246,9 +354,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       if let meshAnchor = anchor as? ARMeshAnchor {
         collectedMeshAnchors.removeAll { $0.identifier == meshAnchor.identifier }
         collectedMeshAnchors.append(meshAnchor)
-      } else if let faceAnchor = anchor as? ARFaceAnchor {
-        collectedFaceAnchors.removeAll { $0.identifier == faceAnchor.identifier }
-        collectedFaceAnchors.append(faceAnchor)
       }
     }
   }
@@ -256,32 +361,23 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
   func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
     for anchor in anchors {
       collectedMeshAnchors.removeAll { $0.identifier == anchor.identifier }
-      collectedFaceAnchors.removeAll { $0.identifier == anchor.identifier }
     }
   }
 
   // MARK: - ARSCNViewDelegate
 
   func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
-    guard showMeshOverlay else { return SCNNode() }
-    if let meshAnchor = anchor as? ARMeshAnchor {
-      return SCNNode(geometry: createLiDARGeometry(from: meshAnchor.geometry))
-    }
-    if let faceAnchor = anchor as? ARFaceAnchor {
-      return SCNNode(geometry: createFaceGeometry(from: faceAnchor.geometry))
-    }
-    return nil
+    guard showMeshOverlay, let meshAnchor = anchor as? ARMeshAnchor else { return SCNNode() }
+    return SCNNode(geometry: createLiDARGeometry(from: meshAnchor.geometry))
   }
 
   func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
     if let meshAnchor = anchor as? ARMeshAnchor {
       node.geometry = showMeshOverlay ? createLiDARGeometry(from: meshAnchor.geometry) : nil
-    } else if let faceAnchor = anchor as? ARFaceAnchor {
-      node.geometry = showMeshOverlay ? createFaceGeometry(from: faceAnchor.geometry) : nil
     }
   }
 
-  // MARK: - Geometry Builders (AR overlay)
+  // MARK: - LiDAR Overlay Geometry
 
   private func createLiDARGeometry(from meshGeometry: ARMeshGeometry) -> SCNGeometry {
     let vertexCount = meshGeometry.vertices.count
@@ -305,19 +401,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
         indices.append(UInt32(indexBuffer.load(fromByteOffset: offset, as: UInt16.self)))
       }
     }
-    return buildARGeometry(vertexSource: vertexSource, indices: indices, faceCount: faceCount)
-  }
-
-  private func createFaceGeometry(from faceGeometry: ARFaceGeometry) -> SCNGeometry {
-    let vertices = faceGeometry.vertices.map { SCNVector3($0.x, $0.y, $0.z) }
-    let vertexSource = SCNGeometrySource(vertices: vertices)
-    let indices = faceGeometry.triangleIndices.map { UInt32($0) }
-    return buildARGeometry(vertexSource: vertexSource, indices: indices,
-                           faceCount: faceGeometry.triangleCount)
-  }
-
-  private func buildARGeometry(vertexSource: SCNGeometrySource,
-                                indices: [UInt32], faceCount: Int) -> SCNGeometry {
     let indexData = Data(bytes: indices, count: indices.count * MemoryLayout<UInt32>.stride)
     let element = SCNGeometryElement(data: indexData, primitiveType: .triangles,
                                      primitiveCount: faceCount,
@@ -331,30 +414,14 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     return geometry
   }
 
-  // MARK: - TrueDepth Object Export (depth map → STL)
+  // MARK: - Fused Depth → STL Export
 
-  private func convertDepthSamplesToSTL(
-    samples: [(AVDepthData, AVCameraCalibrationData?)],
+  private func convertFusedDepthToSTL(
+    sum: [Float], count: [Int32],
+    width: Int, height: Int,
+    calibration: AVCameraCalibrationData?,
     filename: String) throws -> String {
 
-    // Use middle sample for best temporal stability
-    let (rawDepth, calibration) = samples[samples.count / 2]
-
-    var depthData = rawDepth
-    if depthData.depthDataType != kCVPixelFormatType_DepthFloat32 {
-      depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
-    }
-
-    let depthMap = depthData.depthDataMap
-    CVPixelBufferLockBaseAddress(depthMap, .readOnly)
-    defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
-
-    let width       = CVPixelBufferGetWidth(depthMap)
-    let height      = CVPixelBufferGetHeight(depthMap)
-    let bytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
-    let base        = CVPixelBufferGetBaseAddress(depthMap)!
-
-    // Camera intrinsics, scaled to depth-map resolution
     var fx: Float = Float(width) * 1.1
     var fy: Float = Float(width) * 1.1
     var cx: Float = Float(width)  / 2.0
@@ -363,44 +430,37 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     if let cal = calibration {
       let refW  = Float(cal.intrinsicMatrixReferenceDimensions.width)
       let scale = Float(width) / refW
-      let m = cal.intrinsicMatrix   // column-major: m[col][row]
-      fx = m[0][0] * scale
-      fy = m[1][1] * scale
-      cx = m[2][0] * scale
-      cy = m[2][1] * scale
+      let m = cal.intrinsicMatrix
+      fx = m[0][0] * scale; fy = m[1][1] * scale
+      cx = m[2][0] * scale; cy = m[2][1] * scale
     }
 
-    // Sample every sampleStride pixels to balance resolution vs. memory
     let sampleStride = 2
     let cols = (width  - 1) / sampleStride + 1
     let rows = (height - 1) / sampleStride + 1
 
-    // Back-project depth pixels to 3D (right-handed, Y-up, Z toward viewer)
     var grid = [[SIMD3<Float>?]](
       repeating: [SIMD3<Float>?](repeating: nil, count: cols),
       count: rows)
 
     for gy in 0..<rows {
       let py = gy * sampleStride
-      let rowPtr = base.advanced(by: py * bytesPerRow)
-        .assumingMemoryBound(to: Float.self)
       for gx in 0..<cols {
         let px = gx * sampleStride
-        let d  = rowPtr[px]
-        guard d.isFinite, d > 0.15, d < 1.2 else { continue }
+        let i  = py * width + px
+        guard i < count.count, count[i] > 0 else { continue }
+        let d = sum[i] / Float(count[i])
+        guard d.isFinite, d > 0.15, d < 1.5 else { continue }
         grid[gy][gx] = SIMD3<Float>(
           (Float(px) - cx) * d / fx,
           -(Float(py) - cy) * d / fy,
-          -d
-        )
+          -d)
       }
     }
 
-    // Skip triangles that bridge depth discontinuities
     let maxGap: Float = 0.03
     func zGap(_ a: SIMD3<Float>, _ b: SIMD3<Float>) -> Float { abs(a.z - b.z) }
 
-    // Pass 1: count triangles
     var triCount = 0
     for gy in 0..<(rows - 1) {
       for gx in 0..<(cols - 1) {
@@ -420,7 +480,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
       ])
     }
 
-    // Pass 2: write binary STL
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
     bytes[80] = UInt8(tc & 0xFF)
@@ -456,7 +515,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
 
   private func writeDepthFloat(_ v: Float, into bytes: inout [UInt8], at offset: inout Int) {
     withUnsafeBytes(of: v) { src in
-      bytes[offset]   = src[0]; bytes[offset + 1] = src[1]
+      bytes[offset]     = src[0]; bytes[offset + 1] = src[1]
       bytes[offset + 2] = src[2]; bytes[offset + 3] = src[3]
     }
     offset += 4
@@ -490,9 +549,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     let asset = MDLAsset()
     for anchor in anchors {
       let meshGeometry = anchor.geometry
-      let transform = anchor.transform
-      let vertexCount = meshGeometry.vertices.count
-      let faceCount = meshGeometry.faces.count
+      let transform    = anchor.transform
+      let vertexCount  = meshGeometry.vertices.count
+      let faceCount    = meshGeometry.faces.count
       var vertices: [SIMD3<Float>] = []
       let vertexPointer = meshGeometry.vertices.buffer.contents()
         .bindMemory(to: SIMD3<Float>.self, capacity: vertexCount)
@@ -501,7 +560,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
         let world = transform * SIMD4<Float>(local.x, local.y, local.z, 1.0)
         vertices.append(SIMD3<Float>(world.x, world.y, world.z))
       }
-      let indexBuffer = meshGeometry.faces.buffer.contents()
+      let indexBuffer   = meshGeometry.faces.buffer.contents()
       let bytesPerIndex = meshGeometry.faces.bytesPerIndex
       var indices: [UInt32] = []
       for i in 0..<(faceCount * 3) {
@@ -520,47 +579,19 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     return try exportAsset(asset, filename: filename)
   }
 
-  // MARK: - Face STL Export
-
-  private func convertFaceMeshToSTL(anchors: [ARFaceAnchor], filename: String) throws -> String {
-    let allocator = MDLMeshBufferDataAllocator()
-    let asset = MDLAsset()
-    for anchor in anchors {
-      let faceGeometry = anchor.geometry
-      let transform = anchor.transform
-      let vertexCount = faceGeometry.vertices.count
-      var vertices: [SIMD3<Float>] = []
-      for i in 0..<vertexCount {
-        let local = faceGeometry.vertices[i]
-        let world = transform * SIMD4<Float>(local.x, local.y, local.z, 1.0)
-        vertices.append(SIMD3<Float>(world.x, world.y, world.z))
-      }
-      var indices: [UInt32] = []
-      for i in 0..<(faceGeometry.triangleCount * 3) {
-        indices.append(UInt32(faceGeometry.triangleIndices[i]))
-      }
-      if let mdlMesh = buildMDLMesh(vertices: vertices, indices: indices,
-                                    vertexCount: vertexCount, allocator: allocator) {
-        asset.add(mdlMesh)
-      }
-    }
-    return try exportAsset(asset, filename: filename)
-  }
-
   private func buildMDLMesh(vertices: [SIMD3<Float>], indices: [UInt32],
                              vertexCount: Int,
                              allocator: MDLMeshBufferDataAllocator) -> MDLMesh? {
-    let vertexData = Data(bytes: vertices,
-                          count: vertices.count * MemoryLayout<SIMD3<Float>>.stride)
+    let vertexData   = Data(bytes: vertices, count: vertices.count * MemoryLayout<SIMD3<Float>>.stride)
     let vertexBuffer = allocator.newBuffer(with: vertexData, type: .vertex)
     let vertexDescriptor = MDLVertexDescriptor()
     let posAttr = MDLVertexAttribute(name: MDLVertexAttributePosition,
                                      format: .float3, offset: 0, bufferIndex: 0)
     vertexDescriptor.attributes = NSMutableArray(array: [posAttr])
-    vertexDescriptor.layouts = NSMutableArray(array: [
+    vertexDescriptor.layouts    = NSMutableArray(array: [
       MDLVertexBufferLayout(stride: MemoryLayout<SIMD3<Float>>.stride)
     ])
-    let indexData = Data(bytes: indices, count: indices.count * MemoryLayout<UInt32>.stride)
+    let indexData   = Data(bytes: indices, count: indices.count * MemoryLayout<UInt32>.stride)
     let indexBuffer = allocator.newBuffer(with: indexData, type: .index)
     let submesh = MDLSubmesh(indexBuffer: indexBuffer, indexCount: indices.count,
                              indexType: .uInt32, geometryType: .triangles, material: nil)
@@ -572,7 +603,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate,
     let documentsDir = FileManager.default.urls(for: .documentDirectory,
                                                 in: .userDomainMask).first!
     let sanitized = filename.hasSuffix(".stl") ? filename : "\(filename).stl"
-    let fileURL = documentsDir.appendingPathComponent(sanitized)
+    let fileURL   = documentsDir.appendingPathComponent(sanitized)
     if FileManager.default.fileExists(atPath: fileURL.path) {
       try FileManager.default.removeItem(at: fileURL)
     }

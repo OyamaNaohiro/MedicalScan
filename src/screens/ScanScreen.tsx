@@ -98,27 +98,6 @@ export default function ScanScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.modeCard, scannerMode === 'trueDepth' && styles.modeCardActive]}
-            onPress={() => setScannerMode('trueDepth')}>
-            <Text style={styles.modeCardIcon}>{'👤'}</Text>
-            <Text
-              style={[
-                styles.modeCardTitle,
-                scannerMode === 'trueDepth' && styles.modeCardTitleActive,
-              ]}>
-              TrueDepth（顔）
-            </Text>
-            <Text style={styles.modeCardDesc}>
-              顔の3Dスキャン{'\n'}Face ID搭載機種
-            </Text>
-            {scannerMode === 'trueDepth' && (
-              <View style={styles.modeCardCheck}>
-                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[
               styles.modeCard,
               scannerMode === 'trueDepthObject' && styles.modeCardActive,
@@ -147,12 +126,7 @@ export default function ScanScreen() {
           style={styles.proceedButton}
           onPress={() => setPhase('active')}>
           <Text style={styles.proceedButtonText}>
-            {scannerMode === 'lidar'
-              ? 'LiDAR'
-              : scannerMode === 'trueDepthObject'
-              ? 'TrueDepth（物体）'
-              : 'TrueDepth（顔）'}
-            でスキャン開始
+            {scannerMode === 'lidar' ? 'LiDAR' : 'TrueDepth（物体）'}でスキャン開始
           </Text>
         </TouchableOpacity>
       </SafeAreaView>
