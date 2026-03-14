@@ -21,6 +21,7 @@ export default function ScanScreen() {
   const [showMesh, setShowMesh] = useState(true);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('lidar');
   const [exportFilename, setExportFilename] = useState('');
+  const [shareFilePath, setShareFilePath] = useState('');
 
   // Reset to selection screen on tab blur
   useFocusEffect(
@@ -37,7 +38,7 @@ export default function ScanScreen() {
     const subscription = addScanEventListener(event => {
       if (event.type === 'exported') {
         setScanState('idle');
-        Alert.alert('保存完了', `STLファイルを保存しました:\n${event.path}`);
+        setShareFilePath(event.path ?? '');
         setExportFilename('');
       } else if (event.type === 'error') {
         setScanState('idle');
@@ -142,6 +143,7 @@ export default function ScanScreen() {
         scannerMode={scannerMode}
         isScanning={scanState === 'scanning'}
         exportFilename={exportFilename}
+        shareFilePath={shareFilePath}
       />
 
       <TouchableOpacity

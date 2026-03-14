@@ -98,6 +98,25 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
   }
 
+  @objc var shareFilePath: String = "" {
+    didSet {
+      guard !shareFilePath.isEmpty else { return }
+      let url = URL(fileURLWithPath: shareFilePath)
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self,
+              let rootVC = self.window?.rootViewController else { return }
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+        let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let pop = vc.popoverPresentationController {
+          pop.sourceView = self
+          pop.sourceRect = CGRect(x: self.bounds.midX, y: self.bounds.midY, width: 0, height: 0)
+        }
+        topVC.present(vc, animated: true)
+      }
+    }
+  }
+
   // MARK: - Init
 
   override init(frame: CGRect) {

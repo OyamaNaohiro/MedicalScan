@@ -9,6 +9,7 @@ interface LiDARScannerViewProps {
   scannerMode?: ScannerMode;
   isScanning?: boolean;
   exportFilename?: string;
+  shareFilePath?: string;
 }
 
 const NativeLiDARView =
@@ -22,6 +23,7 @@ const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
   scannerMode = 'lidar',
   isScanning = false,
   exportFilename = '',
+  shareFilePath = '',
 }) => {
   if (!NativeLiDARView) {
     return <View style={style} />;
@@ -33,6 +35,7 @@ const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
       scannerMode={scannerMode}
       isScanning={isScanning}
       exportFilename={exportFilename}
+      shareFilePath={shareFilePath}
     />
   );
 };
