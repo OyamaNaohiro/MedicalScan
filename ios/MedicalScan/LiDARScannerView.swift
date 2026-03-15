@@ -368,8 +368,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)],
     filename: String) throws -> String {
 
-    // ── 1. Filter: keep only voxels seen in ≥3 frames (removes noise) ─────
-    let filtered = voxels.filter { $0.value.count >= 5 }
+    // ── 1. Filter: keep only voxels seen in ≥8 frames (removes noise) ─────
+    let filtered = voxels.filter { $0.value.count >= 8 }
     let occupied = Set(filtered.keys)
     // ── 2. Marching Cubes surface extraction ─────────────────────────
     // 8 cube corner offsets (standard Bourke numbering)
