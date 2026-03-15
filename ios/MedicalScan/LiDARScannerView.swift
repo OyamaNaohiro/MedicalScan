@@ -479,10 +479,19 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       smoothStep(factor: mu)
     }
 
-    // ── 5. Double-sided: append back faces with reversed winding ──────
-    triIdx += triIdx.map { ($0.0, $0.2, $0.1) }
+    // ── 5. Orient normals outward (open mesh, single-sided) ──────
+    // Compute mesh centroid as reference for "inside"
+    let centroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
+    // Flip triangles whose normal points toward the centroid (inward)
+    triIdx = triIdx.map { (i0, i1, i2) in
+      let v0 = vertPos[i0], v1 = vertPos[i1], v2 = vertPos[i2]
+      let n = simd_cross(v1 - v0, v2 - v0)
+      let fc = (v0 + v1 + v2) / 3.0     // face center
+      // If normal points inward (toward centroid), reverse winding
+      return simd_dot(n, fc - centroid) >= 0 ? (i0, i1, i2) : (i0, i2, i1)
+    }
 
-    // ── 6. Write binary STL with recomputed normals ────────────────────────
+    // ── 6. Write binary STL with outward normals ────────
     let triCount = triIdx.count
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
