@@ -8,7 +8,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
@@ -27,6 +27,7 @@ interface STLFile {
 export default function FilesScreen() {
   const [files, setFiles] = useState<STLFile[]>([]);
   const [viewingFile, setViewingFile] = useState<STLFile | null>(null);
+  const insets = useSafeAreaInsets();
 
   const loadFiles = useCallback(async () => {
     try {
@@ -162,7 +163,7 @@ export default function FilesScreen() {
         animationType="slide"
         onRequestClose={() => setViewingFile(null)}>
         <SafeAreaView style={styles.viewerContainer}>
-          <View style={styles.viewerHeader}>
+          <View style={[styles.viewerHeader, {paddingTop: insets.top + 12}]}>
             <Text style={styles.viewerTitle} numberOfLines={1}>
               {viewingFile?.name}
             </Text>
@@ -290,7 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     backgroundColor: '#1c1c1e',
   },
   viewerTitle: {
