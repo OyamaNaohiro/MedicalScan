@@ -475,11 +475,11 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       let iy = max(0, min(gy-2, Int(lp.y)))
       let iz = max(0, min(gz-2, Int(lp.z)))
       let fx = lp.x-Float(ix), fy = lp.y-Float(iy), fz = lp.z-Float(iz)
-      isoSum +=
-        f[fi(ix,iy,iz)]    *(1-fx)*(1-fy)*(1-fz) + f[fi(ix+1,iy,iz)]    *fx*(1-fy)*(1-fz) +
-        f[fi(ix,iy+1,iz)]  *(1-fx)*fy*(1-fz)     + f[fi(ix+1,iy+1,iz)]  *fx*fy*(1-fz)     +
-        f[fi(ix,iy,iz+1)]  *(1-fx)*(1-fy)*fz     + f[fi(ix+1,iy,iz+1)]  *fx*(1-fy)*fz     +
-        f[fi(ix,iy+1,iz+1)]*(1-fx)*fy*fz         + f[fi(ix+1,iy+1,iz+1)]*fx*fy*fz
+      let w000=f[fi(ix,iy,iz)]*(1-fx)*(1-fy)*(1-fz); let w100=f[fi(ix+1,iy,iz)]*fx*(1-fy)*(1-fz)
+      let w010=f[fi(ix,iy+1,iz)]*(1-fx)*fy*(1-fz); let w110=f[fi(ix+1,iy+1,iz)]*fx*fy*(1-fz)
+      let w001=f[fi(ix,iy,iz+1)]*(1-fx)*(1-fy)*fz; let w101=f[fi(ix+1,iy,iz+1)]*fx*(1-fy)*fz
+      let w011=f[fi(ix,iy+1,iz+1)]*(1-fx)*fy*fz;   let w111=f[fi(ix+1,iy+1,iz+1)]*fx*fy*fz
+      isoSum += w000+w100+w010+w110+w001+w101+w011+w111
     }
     let isoValue = isoSum / Float(points.count)
 
