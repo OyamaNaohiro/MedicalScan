@@ -15,7 +15,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
   private var worldVoxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.002        // 2 mm per voxel
+  private let voxelSize: Float = 0.001        // 1 mm per voxel
   private var pointCloudNode: SCNNode?
   private var fusedFrameCount   = 0
   private var lastVisualizeCount = 0
