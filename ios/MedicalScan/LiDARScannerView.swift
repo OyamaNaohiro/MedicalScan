@@ -426,28 +426,26 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         NSLocalizedDescriptionKey: "メッシュを生成できませんでした。スキャンデータが少なすぎます。"])
     }
 
-    // ── 3. Midpoint subdivision (1 level: each triangle → 4) ─────────
-    var midCache = [SIMD3<Int32>: Int]()
-    func midpoint(_ a: Int, _ b: Int) -> Int {
-      let lo = min(a, b), hi = max(a, b)
-      let mk = SIMD3<Int32>(Int32(lo), Int32(hi), 0)
-      if let i = midCache[mk] { return i }
-      let m = (vertPos[a] + vertPos[b]) * 0.5
-      let i = vertPos.count
-      vertPos.append(m); midCache[mk] = i; return i
+    // ── 3. Midpoint subdivision (2 levels: each triangle → 16) ────────
+    for _ in 0..<2 {
+      var midCache = [SIMD3<Int32>: Int]()
+      var subdTri = [(Int, Int, Int)]()
+      subdTri.reserveCapacity(triIdx.count * 4)
+      for (i0, i1, i2) in triIdx {
+        func mid(_ a: Int, _ b: Int) -> Int {
+          let lo = min(a, b), hi = max(a, b)
+          let mk = SIMD3<Int32>(Int32(lo), Int32(hi), 0)
+          if let i = midCache[mk] { return i }
+          let m = (vertPos[a] + vertPos[b]) * 0.5
+          let i = vertPos.count
+          vertPos.append(m); midCache[mk] = i; return i
+        }
+        let m01 = mid(i0, i1), m12 = mid(i1, i2), m20 = mid(i2, i0)
+        subdTri.append((i0, m01, m20)); subdTri.append((i1, m12, m01))
+        subdTri.append((i2, m20, m12)); subdTri.append((m01, m12, m20))
+      }
+      triIdx = subdTri
     }
-    var subdTri = [(Int, Int, Int)]()
-    subdTri.reserveCapacity(triIdx.count * 4)
-    for (i0, i1, i2) in triIdx {
-      let m01 = midpoint(i0, i1)
-      let m12 = midpoint(i1, i2)
-      let m20 = midpoint(i2, i0)
-      subdTri.append((i0,  m01, m20))
-      subdTri.append((i1,  m12, m01))
-      subdTri.append((i2,  m20, m12))
-      subdTri.append((m01, m12, m20))
-    }
-    triIdx = subdTri
     // ────────────────────────────────────────────────────────────────────
 
     // ── 4. Taubin smoothing (λ/μ alternating — no volume shrinkage) ───────
@@ -468,12 +466,15 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<8 {          // 8 Taubin iterations
+    for _ in 0..<4 {          // 4 Taubin iterations (2-level subdiv already refined)
       smoothStep(factor: lambda)
       smoothStep(factor: mu)
     }
 
-    // ── 5. Write binary STL with recomputed normals ────────────────────────
+    // ── 5. Double-sided: append back faces with reversed winding ──────
+    triIdx += triIdx.map { ($0.0, $0.2, $0.1) }
+
+    // ── 6. Write binary STL with recomputed normals ────────────────────────
     let triCount = triIdx.count
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
