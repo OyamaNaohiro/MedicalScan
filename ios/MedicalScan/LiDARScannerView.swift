@@ -434,6 +434,36 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         NSLocalizedDescriptionKey: "メッシュを生成できませんでした。スキャンデータが少なすぎます。"])
     }
 
+    // ── 2.5. Keep only largest connected component ────
+    do {
+      var vertToTri = [Int: [Int]]()
+      for (ti, (i0, i1, i2)) in triIdx.enumerated() {
+        vertToTri[i0, default: []].append(ti)
+        vertToTri[i1, default: []].append(ti)
+        vertToTri[i2, default: []].append(ti)
+      }
+      var visited = [Bool](repeating: false, count: triIdx.count)
+      var components = [[Int]]()
+      for start in 0..<triIdx.count {
+        guard !visited[start] else { continue }
+        var comp = [Int]()
+        var queue = [start]; visited[start] = true
+        while !queue.isEmpty {
+          let ti = queue.removeFirst(); comp.append(ti)
+          let (ia, ib, ic) = triIdx[ti]
+          for v in [ia, ib, ic] {
+            for nb in vertToTri[v, default: []] where !visited[nb] {
+              visited[nb] = true; queue.append(nb)
+            }
+          }
+        }
+        components.append(comp)
+      }
+      if let largest = components.max(by: { $0.count < $1.count }) {
+        triIdx = largest.map { triIdx[$0] }
+      }
+    }
+
     // ── 3. Midpoint subdivision (1 level: each MC triangle → 4) ────────
     for _ in 0..<1 {
       var midCache = [SIMD3<Int32>: Int]()
@@ -474,7 +504,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<4 {          // 4 Taubin iterations (2-level subdiv already refined)
+    for _ in 0..<8 {          // 8 Taubin iterations for smoother result
       smoothStep(factor: lambda)
       smoothStep(factor: mu)
     }
