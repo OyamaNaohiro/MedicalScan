@@ -15,7 +15,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
   private var worldVoxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.001        // 1 mm per voxel
+  private let voxelSize: Float = 0.002        // 2 mm per voxel
   private var pointCloudNode: SCNNode?
   private var fusedFrameCount   = 0
   private var lastVisualizeCount = 0
@@ -165,12 +165,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       }
       let config = ARFaceTrackingConfiguration()
       if ARFaceTrackingConfiguration.supportsWorldTracking {
-        config.isWorldTrackingEnabled = true   // iPhone 12+ で安定した姿勢追跡
+        config.isWorldTrackingEnabled = true
       }
       config.isLightEstimationEnabled = false
       sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
 
-    } else {  // lidar
+    } else {
       guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
         ScanEventEmitter.emitEvent(["type": "error",
           "message": "LiDARスキャナーはこのデバイスでは利用できません。"])
@@ -196,7 +196,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
   // MARK: - ARSessionDelegate
 
-  // TrueDepth Object: integrate depth every ARKit frame
   func session(_ session: ARSession, didUpdate frame: ARFrame) {
     guard isScanning, scannerMode == "trueDepthObject" else { return }
     guard let capturedDepth = frame.capturedDepthData else { return }
@@ -208,7 +207,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
   }
 
-  // LiDAR: collect mesh anchors
   func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
     guard isScanning, scannerMode == "lidar" else { return }
     anchors.compactMap { $0 as? ARMeshAnchor }.forEach { collectedMeshAnchors.append($0) }
@@ -256,12 +254,11 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     let bpr = CVPixelBufferGetBytesPerRow(map)
     let base = CVPixelBufferGetBaseAddress(map)!
 
-    // Camera intrinsics from the depth sensor's own calibration
     var fx: Float, fy: Float, cx: Float, cy: Float
     if let cal = depthData.cameraCalibrationData {
       let refW  = Float(cal.intrinsicMatrixReferenceDimensions.width)
       let scale = Float(dw) / refW
-      let m = cal.intrinsicMatrix       // column-major: m[col][row]
+      let m = cal.intrinsicMatrix
       fx = m[0][0] * scale
       fy = m[1][1] * scale
       cx = m[2][0] * scale
@@ -271,9 +268,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       cx = Float(dw) / 2.0;  cy = Float(dh) / 2.0
     }
 
-    // ── Foreground detection: depth histogram with stride-8 pass ──────────
-    // Find the dominant depth cluster, then only integrate pixels within
-    // ±18 cm of it. This keeps the target object and discards background.
     let dMin: Float = 0.15, dMax: Float = 0.85
     let nBins = 14
     var hist = [Int](repeating: 0, count: nBins)
@@ -289,9 +283,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     let peakD    = dMin + (Float(peakBin) + 0.5) * (dMax - dMin) / Float(nBins)
     let filterLo = max(dMin, peakD - 0.18)
     let filterHi = min(dMax, peakD + 0.18)
-    // ──────────────────────────────────────────────────────────────────────
 
-    let step = 3  // sample every 3rd pixel for speed/quality balance
+    let step = 3
 
     for py in Swift.stride(from: 0, to: dh, by: step) {
       let row = base.advanced(by: py * bpr).assumingMemoryBound(to: Float.self)
@@ -299,26 +292,22 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         let d = row[px]
         guard d.isFinite, d > filterLo, d < filterHi else { continue }
 
-        // Back-project to camera space (camera looks in -Z)
         let xc = (Float(px) - cx) * d / fx
         let yc = -(Float(py) - cy) * d / fy
         let zc = -d
 
-        // Transform to world space
         let w4 = cameraTransform * SIMD4<Float>(xc, yc, zc, 1.0)
         let wp = SIMD3<Float>(w4.x, w4.y, w4.z)
 
-        // Quantise to voxel grid
         let key = SIMD3<Int32>(
           Int32(floor(wp.x / voxelSize)),
           Int32(floor(wp.y / voxelSize)),
           Int32(floor(wp.z / voxelSize)))
 
-        // Temporal smoothing: EMA blend + jitter rejection
         let rejectDist = voxelSize * 2.5
         if var e = worldVoxels[key] {
           guard simd_distance(wp, e.center) < rejectDist else { continue }
-          e.center += 0.2 * (wp - e.center)  // EMA: 20% new, 80% stable
+          e.center += 0.2 * (wp - e.center)
           e.count  += 1
           worldVoxels[key] = e
         } else {
@@ -331,7 +320,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     guard fusedFrameCount - lastVisualizeCount >= 20 else { return }
     lastVisualizeCount = fusedFrameCount
 
-    // Snapshot up to 40 k points for visualization
     let pts = Array(worldVoxels.values.prefix(40000)).map { $0.center }
     DispatchQueue.main.async { [weak self] in self?.updatePointCloud(pts) }
   }
@@ -362,25 +350,146 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     pointCloudNode = node
   }
 
-  // MARK: - Voxel Surface → STL Export
+  // MARK: - PCA Normal Estimation
+
+  private func pcaNormal(_ pts: [SIMD3<Float>]) -> SIMD3<Float> {
+    guard pts.count >= 3 else { return SIMD3<Float>(0, 1, 0) }
+    let n = Float(pts.count)
+    let mean = pts.reduce(SIMD3<Float>.zero, +) / n
+    var xx: Float=0, xy: Float=0, xz: Float=0
+    var yy: Float=0, yz: Float=0, zz: Float=0
+    for p in pts {
+      let d = p - mean
+      xx += d.x*d.x; xy += d.x*d.y; xz += d.x*d.z
+      yy += d.y*d.y; yz += d.y*d.z; zz += d.z*d.z
+    }
+    xx /= n; xy /= n; xz /= n; yy /= n; yz /= n; zz /= n
+    func matvec(_ v: SIMD3<Float>) -> SIMD3<Float> {
+      SIMD3(xx*v.x+xy*v.y+xz*v.z,
+            xy*v.x+yy*v.y+yz*v.z,
+            xz*v.x+yz*v.y+zz*v.z)
+    }
+    // Power iteration: largest eigenvector
+    var v1 = simd_normalize(SIMD3<Float>(1, 1, 1))
+    for _ in 0..<12 { let t = matvec(v1); let l = simd_length(t); if l > 0 { v1 = t/l } }
+    let lam1 = simd_dot(v1, matvec(v1))
+    // Second eigenvector via deflation
+    var v2: SIMD3<Float> = abs(v1.x) < 0.8 ? SIMD3(1,0,0) : SIMD3(0,1,0)
+    v2 = simd_normalize(v2 - simd_dot(v2, v1)*v1)
+    for _ in 0..<12 {
+      var t = matvec(v2); t -= lam1 * simd_dot(v1, v2) * v1; t -= simd_dot(t, v1)*v1
+      let l = simd_length(t); if l > 0 { v2 = t/l }
+    }
+    // Normal = 3rd eigenvector (smallest eigenvalue) = cross product
+    return simd_normalize(simd_cross(v1, v2))
+  }
+
+  // MARK: - Voxel Surface → STL Export (Poisson Surface Reconstruction)
 
   private func voxelsToSTL(
     _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)],
     filename: String) throws -> String {
 
-    // ── 1. Filter: keep only voxels seen in ≥8 frames (removes noise) ─────
+    // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
     let filtered = voxels.filter { $0.value.count >= 8 }
-    let occupied = Set(filtered.keys)
-    // ── 2. Marching Cubes surface extraction ─────────────────────────
-    // 8 cube corner offsets (standard Bourke numbering)
+    guard !filtered.isEmpty else {
+      throw NSError(domain: "Scan", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
+    }
+
+    // ── 2. Build oriented point cloud via PCA normals ──────────────────────
+    var points  = [SIMD3<Float>](); points.reserveCapacity(filtered.count)
+    var normals = [SIMD3<Float>](); normals.reserveCapacity(filtered.count)
+    for (key, (center, _)) in filtered {
+      var neighbors = [SIMD3<Float>](); neighbors.reserveCapacity(125)
+      for dz in -2...2 { for dy in -2...2 { for dx in -2...2 {
+        let nk = SIMD3<Int32>(key.x+Int32(dx), key.y+Int32(dy), key.z+Int32(dz))
+        if let nv = filtered[nk] { neighbors.append(nv.center) }
+      }}}
+      points.append(center)
+      normals.append(pcaNormal(neighbors))
+    }
+
+    // ── 3. Orient normals away from scan centroid ──────────────────────────
+    let centroid = points.reduce(SIMD3<Float>.zero, +) / Float(points.count)
+    for i in 0..<normals.count {
+      if simd_dot(normals[i], points[i] - centroid) < 0 { normals[i] = -normals[i] }
+    }
+
+    // ── 4. Build Poisson grid ──────────────────────────────────────────────
+    let gridStep: Float = voxelSize * 3.0   // 6 mm grid for 2 mm voxels
+    var minP = SIMD3<Float>(repeating:  Float.infinity)
+    var maxP = SIMD3<Float>(repeating: -Float.infinity)
+    for p in points { minP = simd_min(minP, p); maxP = simd_max(maxP, p) }
+    let pad: Float = gridStep * 3
+    minP -= SIMD3<Float>(repeating: pad)
+    maxP += SIMD3<Float>(repeating: pad)
+    let fDims = (maxP - minP) / gridStep
+    let gx = max(4, Int(fDims.x.rounded(.up)) + 1)
+    let gy = max(4, Int(fDims.y.rounded(.up)) + 1)
+    let gz = max(4, Int(fDims.z.rounded(.up)) + 1)
+    let cellCount = gx * gy * gz
+    guard cellCount < 3_000_000 else {
+      throw NSError(domain: "Scan", code: 3, userInfo: [
+        NSLocalizedDescriptionKey: "スキャン範囲が広すぎます。対象物に近づいてください。"])
+    }
+    let strideY = gx, strideZ = gx * gy
+    func fi(_ x: Int, _ y: Int, _ z: Int) -> Int { z * strideZ + y * strideY + x }
+
+    // ── 5. Splat divergence of normal field onto grid (∇·N) ────────────────
+    var rhs = [Float](repeating: 0, count: cellCount)
+    let invH: Float = 1.0 / gridStep
+    for (p, nm) in zip(points, normals) {
+      let lp = (p - minP) * invH
+      let ix = max(0, min(gx-2, Int(lp.x)))
+      let iy = max(0, min(gy-2, Int(lp.y)))
+      let iz = max(0, min(gz-2, Int(lp.z)))
+      let fx = lp.x - Float(ix), fy = lp.y - Float(iy), fz = lp.z - Float(iz)
+      for dz in 0...1 { for dy in 0...1 { for dx in 0...1 {
+        let wx: Float  = dx == 0 ? 1-fx : fx
+        let wy: Float  = dy == 0 ? 1-fy : fy
+        let wz: Float  = dz == 0 ? 1-fz : fz
+        let dwx: Float = dx == 0 ? -invH : invH
+        let dwy: Float = dy == 0 ? -invH : invH
+        let dwz: Float = dz == 0 ? -invH : invH
+        rhs[fi(ix+dx, iy+dy, iz+dz)] +=
+          nm.x*dwx*wy*wz + nm.y*wx*dwy*wz + nm.z*wx*wy*dwz
+      }}}
+    }
+
+    // ── 6. Poisson solve: ∇²f = rhs (Gauss-Seidel, 80 iterations) ─────────
+    var f = [Float](repeating: 0, count: cellCount)
+    let h2 = gridStep * gridStep
+    for _ in 0..<80 {
+      for iz in 1..<gz-1 { for iy in 1..<gy-1 { for ix in 1..<gx-1 {
+        let i = fi(ix, iy, iz)
+        f[i] = (f[i+1]+f[i-1]+f[i+strideY]+f[i-strideY]+f[i+strideZ]+f[i-strideZ] - h2*rhs[i]) / 6
+      }}}
+    }
+
+    // ── 7. Isovalue: mean of f sampled at oriented points ─────────────────
+    var isoSum: Float = 0
+    for p in points {
+      let lp = (p - minP) * invH
+      let ix = max(0, min(gx-2, Int(lp.x)))
+      let iy = max(0, min(gy-2, Int(lp.y)))
+      let iz = max(0, min(gz-2, Int(lp.z)))
+      let fx = lp.x-Float(ix), fy = lp.y-Float(iy), fz = lp.z-Float(iz)
+      isoSum +=
+        f[fi(ix,iy,iz)]    *(1-fx)*(1-fy)*(1-fz) + f[fi(ix+1,iy,iz)]    *fx*(1-fy)*(1-fz) +
+        f[fi(ix,iy+1,iz)]  *(1-fx)*fy*(1-fz)     + f[fi(ix+1,iy+1,iz)]  *fx*fy*(1-fz)     +
+        f[fi(ix,iy,iz+1)]  *(1-fx)*(1-fy)*fz     + f[fi(ix+1,iy,iz+1)]  *fx*(1-fy)*fz     +
+        f[fi(ix,iy+1,iz+1)]*(1-fx)*fy*fz         + f[fi(ix+1,iy+1,iz+1)]*fx*fy*fz
+    }
+    let isoValue = isoSum / Float(points.count)
+
+    // ── 8. Marching Cubes on Poisson field (linear edge interpolation) ─────
     let mcCorners: [SIMD3<Int32>] = [
       SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(1,1,0), SIMD3(0,1,0),
       SIMD3(0,0,1), SIMD3(1,0,1), SIMD3(1,1,1), SIMD3(0,1,1)
     ]
-    // For each of the 12 edges: (cornerA, cornerB, gridOffset, axis)
-    // gridOffset + axis gives a globally unique key shared by adjacent cells
-    let mcEdgeA   = [0,1,2,3, 4,5,6,7, 0,1,2,3]
-    let mcEdgeB   = [1,2,3,0, 5,6,7,4, 4,5,6,7]
+    let mcEdgeA    = [0,1,2,3, 4,5,6,7, 0,1,2,3]
+    let mcEdgeB    = [1,2,3,0, 5,6,7,4, 4,5,6,7]
     let mcEdgeOff: [SIMD3<Int32>] = [
       SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(0,1,0), SIMD3(0,0,0),
       SIMD3(0,0,1), SIMD3(1,0,1), SIMD3(0,1,1), SIMD3(0,0,1),
@@ -389,36 +498,28 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     let mcEdgeAxis: [Int32] = [0,1,0,1, 0,1,0,1, 2,2,2,2]
 
     var vertPos   = [SIMD3<Float>]()
-    var vertCache = [SIMD4<Int32>: Int]()   // global edge key → vertex index
+    var vertCache = [SIMD4<Int32>: Int]()
     var triIdx    = [(Int, Int, Int)]()
 
-    // Each occupied voxel acts as a corner of up to 8 MC cells
-    var cellSet = Set<SIMD3<Int32>>()
-    for key in occupied {
-      for dz in -1...0 { for dy in -1...0 { for dx in -1...0 {
-        cellSet.insert(SIMD3(key.x+Int32(dx), key.y+Int32(dy), key.z+Int32(dz)))
-      }}}
-    }
-
-    for cell in cellSet {
-      // Build 8-bit configuration index
+    for iz in 0..<gz-1 { for iy in 0..<gy-1 { for ix in 0..<gx-1 {
       var cubeIdx = 0
-      for (i, c) in mcCorners.enumerated() {
-        if occupied.contains(SIMD3(cell.x+c.x, cell.y+c.y, cell.z+c.z)) { cubeIdx |= (1 << i) }
+      for (ci, c) in mcCorners.enumerated() {
+        if f[fi(ix+Int(c.x), iy+Int(c.y), iz+Int(c.z))] > isoValue { cubeIdx |= (1 << ci) }
       }
       guard cubeIdx > 0 && cubeIdx < 255 else { continue }
 
-      // Shared-vertex lookup: each MC edge has a unique world-space key
       func mcVert(_ edge: Int) -> Int {
         let off = mcEdgeOff[edge]
-        let gk  = SIMD4<Int32>(cell.x+off.x, cell.y+off.y, cell.z+off.z, mcEdgeAxis[edge])
+        let gk  = SIMD4<Int32>(Int32(ix)+off.x, Int32(iy)+off.y, Int32(iz)+off.z, mcEdgeAxis[edge])
         if let idx = vertCache[gk] { return idx }
         let ca = mcCorners[mcEdgeA[edge]], cb = mcCorners[mcEdgeB[edge]]
-        let p  = SIMD3<Float>(Float(cell.x) + Float(ca.x+cb.x)*0.5,
-                               Float(cell.y) + Float(ca.y+cb.y)*0.5,
-                               Float(cell.z) + Float(ca.z+cb.z)*0.5) * voxelSize
+        let fa = f[fi(ix+Int(ca.x), iy+Int(ca.y), iz+Int(ca.z))]
+        let fb = f[fi(ix+Int(cb.x), iy+Int(cb.y), iz+Int(cb.z))]
+        let t  = abs(fa-fb) > 1e-6 ? max(0, min(1, (isoValue-fa)/(fb-fa))) : 0.5
+        let pa = SIMD3<Float>(Float(ix)+Float(ca.x), Float(iy)+Float(ca.y), Float(iz)+Float(ca.z)) * gridStep + minP
+        let pb = SIMD3<Float>(Float(ix)+Float(cb.x), Float(iy)+Float(cb.y), Float(iz)+Float(cb.z)) * gridStep + minP
         let idx = vertPos.count
-        vertPos.append(p); vertCache[gk] = idx; return idx
+        vertPos.append(pa + t*(pb-pa)); vertCache[gk] = idx; return idx
       }
 
       var ti = 0
@@ -427,14 +528,14 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         triIdx.append((mcVert(Int(tbl[ti])), mcVert(Int(tbl[ti+1])), mcVert(Int(tbl[ti+2]))))
         ti += 3
       }
-    }
+    }}}
 
     guard !triIdx.isEmpty else {
       throw NSError(domain: "Scan", code: 2, userInfo: [
         NSLocalizedDescriptionKey: "メッシュを生成できませんでした。スキャンデータが少なすぎます。"])
     }
 
-    // ── 2.5. Keep only largest connected component ────
+    // ── 9. Keep only largest connected component ───────────────────────────
     do {
       var vertToTri = [Int: [Int]]()
       for (ti, (i0, i1, i2)) in triIdx.enumerated() {
@@ -446,8 +547,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       var components = [[Int]]()
       for start in 0..<triIdx.count {
         guard !visited[start] else { continue }
-        var comp = [Int]()
-        var queue = [start]; visited[start] = true
+        var comp = [Int](); var queue = [start]; visited[start] = true
         while !queue.isEmpty {
           let ti = queue.removeFirst(); comp.append(ti)
           let (ia, ib, ic) = triIdx[ti]
@@ -464,29 +564,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       }
     }
 
-    // ── 3. Midpoint subdivision (1 level: each MC triangle → 4) ────────
-    for _ in 0..<1 {
-      var midCache = [SIMD3<Int32>: Int]()
-      var subdTri = [(Int, Int, Int)]()
-      subdTri.reserveCapacity(triIdx.count * 4)
-      for (i0, i1, i2) in triIdx {
-        func mid(_ a: Int, _ b: Int) -> Int {
-          let lo = min(a, b), hi = max(a, b)
-          let mk = SIMD3<Int32>(Int32(lo), Int32(hi), 0)
-          if let i = midCache[mk] { return i }
-          let m = (vertPos[a] + vertPos[b]) * 0.5
-          let i = vertPos.count
-          vertPos.append(m); midCache[mk] = i; return i
-        }
-        let m01 = mid(i0, i1), m12 = mid(i1, i2), m20 = mid(i2, i0)
-        subdTri.append((i0, m01, m20)); subdTri.append((i1, m12, m01))
-        subdTri.append((i2, m20, m12)); subdTri.append((m01, m12, m20))
-      }
-      triIdx = subdTri
-    }
-    // ────────────────────────────────────────────────────────────────────
-
-    // ── 4. Taubin smoothing (λ/μ alternating — no volume shrinkage) ───────
+    // ── 10. Taubin smoothing (4 iterations — Poisson field already smooth) ─
     var adjacency = [Set<Int>](repeating: [], count: vertPos.count)
     for (i0, i1, i2) in triIdx {
       adjacency[i0].insert(i1); adjacency[i0].insert(i2)
@@ -504,31 +582,24 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<8 {          // 8 Taubin iterations for smoother result
-      smoothStep(factor: lambda)
-      smoothStep(factor: mu)
-    }
+    for _ in 0..<4 { smoothStep(factor: lambda); smoothStep(factor: mu) }
 
-    // ── 5. Orient normals outward (open mesh, single-sided) ──────
-    // Compute mesh centroid as reference for "inside"
-    let centroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
-    // Flip triangles whose normal points toward the centroid (inward)
+    // ── 11. Orient normals outward (open mesh, single-sided) ──────────────
+    let meshCentroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
     triIdx = triIdx.map { (i0, i1, i2) in
       let v0 = vertPos[i0], v1 = vertPos[i1], v2 = vertPos[i2]
-      let n = simd_cross(v1 - v0, v2 - v0)
-      let fc = (v0 + v1 + v2) / 3.0     // face center
-      // If normal points inward (toward centroid), reverse winding
-      return simd_dot(n, fc - centroid) >= 0 ? (i0, i1, i2) : (i0, i2, i1)
+      let n  = simd_cross(v1 - v0, v2 - v0)
+      let fc = (v0 + v1 + v2) / 3.0
+      return simd_dot(n, fc - meshCentroid) >= 0 ? (i0, i1, i2) : (i0, i2, i1)
     }
 
-    // ── 6. Write binary STL with outward normals ────────
+    // ── 12. Write binary STL ───────────────────────────────────────────────
     let triCount = triIdx.count
     var bytes = [UInt8](repeating: 0, count: 84 + triCount * 50)
     let tc = UInt32(triCount)
-    bytes[80] = UInt8(tc & 0xFF);         bytes[81] = UInt8((tc >> 8)  & 0xFF)
-    bytes[82] = UInt8((tc >> 16) & 0xFF); bytes[83] = UInt8((tc >> 24) & 0xFF)
+    bytes[80]=UInt8(tc&0xFF); bytes[81]=UInt8((tc>>8)&0xFF)
+    bytes[82]=UInt8((tc>>16)&0xFF); bytes[83]=UInt8((tc>>24)&0xFF)
     var off = 84
-
     for (i0, i1, i2) in triIdx {
       let v0 = vertPos[i0], v1 = vertPos[i1], v2 = vertPos[i2]
       var n = simd_cross(v1 - v0, v2 - v0)
@@ -595,7 +666,6 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   }
 
   // MARK: - Marching Cubes lookup table (Lorensen & Cline 1987 / Bourke)
-  // 256 rows: edge indices (0-11) for up to 5 triangles, -1 = end
   private static let mcTriTable: [[Int8]] = [
     [-1],
     [0,8,3,-1],
