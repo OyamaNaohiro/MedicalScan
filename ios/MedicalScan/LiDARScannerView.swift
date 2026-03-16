@@ -609,7 +609,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
-    let filtered = voxels.filter { $0.value.count >= 12 }
+    let filtered = voxels.filter { $0.value.count >= 9 }
     guard !filtered.isEmpty else {
       throw NSError(domain: "Scan", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
