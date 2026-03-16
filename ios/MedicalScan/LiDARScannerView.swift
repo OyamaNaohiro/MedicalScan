@@ -290,6 +290,31 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     let filterLo = max(dMin, peakD - 0.18)
     let filterHi = min(dMax, peakD + 0.18)
 
+    // \u2500\u2500 ICP: correct per-frame tracking drift \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    var effectiveTransform = cameraTransform
+    if worldVoxels.count > 3000 {
+      var icpPts = [SIMD3<Float>]()
+      icpPts.reserveCapacity(300)
+      var sc = 0
+      outerICP: for py8 in Swift.stride(from: 0, to: dh, by: 8) {
+        let r8 = base.advanced(by: py8 * bpr).assumingMemoryBound(to: Float.self)
+        for px8 in Swift.stride(from: 0, to: dw, by: 8) {
+          sc += 1; guard sc % 2 == 0 else { continue }
+          let d8 = r8[px8]
+          guard d8.isFinite, d8 > filterLo, d8 < filterHi else { continue }
+          let xc8 = (Float(px8) - cx) * d8 / fx
+          let yc8 = -(Float(py8) - cy) * d8 / fy
+          let w48 = cameraTransform * SIMD4<Float>(xc8, yc8, -d8, 1)
+          icpPts.append(SIMD3<Float>(w48.x, w48.y, w48.z))
+          if icpPts.count >= 300 { break outerICP }
+        }
+      }
+      if let corr = icpCorrection(icpPts, worldVoxels) {
+        effectiveTransform = corr * cameraTransform
+      }
+    }
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
     let step = 3
 
     for py in Swift.stride(from: 0, to: dh, by: step) {
@@ -302,7 +327,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         let yc = -(Float(py) - cy) * d / fy
         let zc = -d
 
-        let w4 = cameraTransform * SIMD4<Float>(xc, yc, zc, 1.0)
+        let w4 = effectiveTransform * SIMD4<Float>(xc, yc, zc, 1.0)
         let wp = SIMD3<Float>(w4.x, w4.y, w4.z)
 
         let key = SIMD3<Int32>(
@@ -313,7 +338,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         let rejectDist = voxelSize * 4.0
         if var e = worldVoxels[key] {
           guard simd_distance(wp, e.center) < rejectDist else { continue }
-          e.center += 0.2 * (wp - e.center)
+          e.center += 0.1 * (wp - e.center)  // EMA: 10% new, 90% stable
           e.count  += 1
           worldVoxels[key] = e
         } else {
@@ -373,6 +398,97 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     pointCloudNode = node
   }
 
+
+
+  // MARK: - ICP Pose Correction (Point-to-Point, Horn quaternion method)
+
+  /// Computes rigid correction T such that T * newPts aligns to accumulated voxels.
+  /// Returns nil if not enough correspondences or correction is unreasonably large.
+  private func icpCorrection(
+    _ newPts: [SIMD3<Float>],
+    _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)]
+  ) -> simd_float4x4? {
+
+    guard newPts.count >= 20 else { return nil }
+    let maxDist = voxelSize * 6    // max correspondence distance
+    var R = matrix_identity_float3x3
+    var t = SIMD3<Float>.zero
+
+    for _ in 0..<6 {   // ICP iterations
+      var srcPts = [SIMD3<Float>](); var tgtPts = [SIMD3<Float>]()
+      var totalDist: Float = 0
+
+      for p in newPts {
+        let tp = R * p + t   // apply current estimate
+        let key = SIMD3<Int32>(
+          Int32(floor(tp.x / voxelSize)),
+          Int32(floor(tp.y / voxelSize)),
+          Int32(floor(tp.z / voxelSize)))
+
+        var bestDist = maxDist; var bestPt = SIMD3<Float>.zero; var found = false
+        for dz in -2...2 { for dy in -2...2 { for dx in -2...2 {
+          let nk = SIMD3<Int32>(key.x+Int32(dx), key.y+Int32(dy), key.z+Int32(dz))
+          if let v = voxels[nk], v.count >= 3 {
+            let d = simd_distance(tp, v.center)
+            if d < bestDist { bestDist = d; bestPt = v.center; found = true }
+          }
+        }}}
+        if found { srcPts.append(p); tgtPts.append(bestPt); totalDist += bestDist }
+      }
+
+      guard srcPts.count >= 15 else { return nil }
+      let n = Float(srcPts.count)
+      let residual = totalDist / n
+      let srcC = srcPts.reduce(.zero, +) / n
+      let tgtC = tgtPts.reduce(.zero, +) / n
+
+      // Cross-covariance H (3x3)
+      var hxx:Float=0,hxy:Float=0,hxz:Float=0
+      var hyx:Float=0,hyy:Float=0,hyz:Float=0
+      var hzx:Float=0,hzy:Float=0,hzz:Float=0
+      for i in 0..<srcPts.count {
+        let s = srcPts[i]-srcC, tt = tgtPts[i]-tgtC
+        hxx+=s.x*tt.x; hxy+=s.x*tt.y; hxz+=s.x*tt.z
+        hyx+=s.y*tt.x; hyy+=s.y*tt.y; hyz+=s.y*tt.z
+        hzx+=s.z*tt.x; hzy+=s.z*tt.y; hzz+=s.z*tt.z
+      }
+
+      // Horn's 4x4 symmetric matrix N for optimal quaternion
+      let N: [[Float]] = [
+        [ hxx+hyy+hzz, hyz-hzy,      hzx-hxz,      hxy-hyx      ],
+        [ hyz-hzy,     hxx-hyy-hzz,  hxy+hyx,       hzx+hxz      ],
+        [ hzx-hxz,     hxy+hyx,     -hxx+hyy-hzz,   hyz+hzy      ],
+        [ hxy-hyx,     hzx+hxz,      hyz+hzy,       -hxx-hyy+hzz ]
+      ]
+      var q: [Float] = [1,0,0,0]
+      for _ in 0..<30 {
+        var nq = [Float](repeating: 0, count: 4)
+        for i in 0..<4 { for j in 0..<4 { nq[i] += N[i][j]*q[j] } }
+        let l = sqrt(nq.map{$0*$0}.reduce(0,+)); guard l > 1e-10 else { break }
+        q = nq.map{$0/l}
+      }
+      let qw=q[0],qx=q[1],qy=q[2],qz=q[3]
+      let newR = simd_float3x3(columns:(
+        SIMD3(1-2*(qy*qy+qz*qz), 2*(qx*qy+qw*qz),  2*(qx*qz-qw*qy)),
+        SIMD3(2*(qx*qy-qw*qz),   1-2*(qx*qx+qz*qz), 2*(qy*qz+qw*qx)),
+        SIMD3(2*(qx*qz+qw*qy),   2*(qy*qz-qw*qx),   1-2*(qx*qx+qy*qy))
+      ))
+      let newT = tgtC - newR * srcC
+      R = newR * R; t = newR * t + newT
+
+      if residual < voxelSize * 0.5 { break }   // converged
+    }
+
+    // Reject if translation correction > 4 cm (ICP likely diverged)
+    guard simd_length(t) < 0.04 else { return nil }
+
+    var result = matrix_identity_float4x4
+    result.columns.0 = SIMD4<Float>(R.columns.0.x, R.columns.0.y, R.columns.0.z, 0)
+    result.columns.1 = SIMD4<Float>(R.columns.1.x, R.columns.1.y, R.columns.1.z, 0)
+    result.columns.2 = SIMD4<Float>(R.columns.2.x, R.columns.2.y, R.columns.2.z, 0)
+    result.columns.3 = SIMD4<Float>(t.x, t.y, t.z, 1)
+    return result
+  }
 
   // MARK: - Realtime Mesh Preview (lightweight binary MC, runs on background queue)
 
