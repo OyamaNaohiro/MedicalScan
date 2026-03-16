@@ -15,10 +15,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
   private var worldVoxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.002        // 2 mm per voxel
+  private let voxelSize: Float = 0.003        // 3 mm per voxel (better 360 stability)
   private var pointCloudNode: SCNNode?
+  private var realtimeMeshNode: SCNNode?
   private var fusedFrameCount   = 0
   private var lastVisualizeCount = 0
+  private var lastMeshCount      = 0
 
   // MARK: - React Props
 
@@ -45,6 +47,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         DispatchQueue.main.async { [weak self] in
           self?.pointCloudNode?.removeFromParentNode()
           self?.pointCloudNode = nil
+          self?.realtimeMeshNode?.removeFromParentNode()
+          self?.realtimeMeshNode = nil
         }
         if !isSessionRunning { startPreviewSession() }
         ScanEventEmitter.emitEvent(["type": "scanStarted"])
@@ -190,6 +194,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     DispatchQueue.main.async { [weak self] in
       self?.pointCloudNode?.removeFromParentNode()
       self?.pointCloudNode = nil
+      self?.realtimeMeshNode?.removeFromParentNode()
+      self?.realtimeMeshNode = nil
     }
     isSessionRunning = false
   }
@@ -304,7 +310,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
           Int32(floor(wp.y / voxelSize)),
           Int32(floor(wp.z / voxelSize)))
 
-        let rejectDist = voxelSize * 2.5
+        let rejectDist = voxelSize * 4.0
         if var e = worldVoxels[key] {
           guard simd_distance(wp, e.center) < rejectDist else { continue }
           e.center += 0.2 * (wp - e.center)
@@ -322,6 +328,23 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
     let pts = Array(worldVoxels.values.prefix(40000)).map { $0.center }
     DispatchQueue.main.async { [weak self] in self?.updatePointCloud(pts) }
+
+    guard fusedFrameCount - lastMeshCount >= 60 else { return }
+    lastMeshCount = fusedFrameCount
+    let snapVoxels = worldVoxels
+    DispatchQueue.global(qos: .utility).async { [weak self] in
+      guard let self = self else { return }
+      let geo = self.buildRealtimeMesh(snapVoxels)
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        self.realtimeMeshNode?.removeFromParentNode()
+        if let geo = geo {
+          let node = SCNNode(geometry: geo)
+          self.sceneView.scene.rootNode.addChildNode(node)
+          self.realtimeMeshNode = node
+        }
+      }
+    }
   }
 
   // MARK: - Real-time Point Cloud Visualisation
@@ -348,6 +371,85 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     pointCloudNode?.removeFromParentNode()
     sceneView.scene.rootNode.addChildNode(node)
     pointCloudNode = node
+  }
+
+
+  // MARK: - Realtime Mesh Preview (lightweight binary MC, runs on background queue)
+
+  private func buildRealtimeMesh(
+    _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)]
+  ) -> SCNGeometry? {
+    let occupied = Set(voxels.filter { $0.value.count >= 3 }.keys)
+    guard occupied.count > 10 else { return nil }
+
+    let mcCorners: [SIMD3<Int32>] = [
+      SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(1,1,0), SIMD3(0,1,0),
+      SIMD3(0,0,1), SIMD3(1,0,1), SIMD3(1,1,1), SIMD3(0,1,1)
+    ]
+    let mcEdgeA   = [0,1,2,3, 4,5,6,7, 0,1,2,3]
+    let mcEdgeB   = [1,2,3,0, 5,6,7,4, 4,5,6,7]
+    let mcEdgeOff: [SIMD3<Int32>] = [
+      SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(0,1,0), SIMD3(0,0,0),
+      SIMD3(0,0,1), SIMD3(1,0,1), SIMD3(0,1,1), SIMD3(0,0,1),
+      SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(1,1,0), SIMD3(0,1,0)
+    ]
+    let mcEdgeAxis: [Int32] = [0,1,0,1, 0,1,0,1, 2,2,2,2]
+
+    var vertPos   = [SIMD3<Float>]()
+    var vertCache = [SIMD4<Int32>: Int]()
+    var indices   = [Int32]()
+
+    var cellSet = Set<SIMD3<Int32>>()
+    for key in occupied {
+      for dz in -1...0 { for dy in -1...0 { for dx in -1...0 {
+        cellSet.insert(SIMD3(key.x+Int32(dx), key.y+Int32(dy), key.z+Int32(dz)))
+      }}}
+    }
+
+    for cell in cellSet {
+      var cubeIdx = 0
+      for (i, c) in mcCorners.enumerated() {
+        if occupied.contains(SIMD3(cell.x+c.x, cell.y+c.y, cell.z+c.z)) { cubeIdx |= (1 << i) }
+      }
+      guard cubeIdx > 0 && cubeIdx < 255 else { continue }
+
+      func mcVert(_ edge: Int) -> Int32 {
+        let off = mcEdgeOff[edge]
+        let gk  = SIMD4<Int32>(cell.x+off.x, cell.y+off.y, cell.z+off.z, mcEdgeAxis[edge])
+        if let idx = vertCache[gk] { return Int32(idx) }
+        let ca = mcCorners[mcEdgeA[edge]], cb = mcCorners[mcEdgeB[edge]]
+        let p  = SIMD3<Float>(
+          Float(cell.x) + Float(ca.x+cb.x)*0.5,
+          Float(cell.y) + Float(ca.y+cb.y)*0.5,
+          Float(cell.z) + Float(ca.z+cb.z)*0.5) * voxelSize
+        let idx = vertPos.count
+        vertPos.append(p); vertCache[gk] = idx; return Int32(idx)
+      }
+
+      var ti = 0
+      let tbl = LiDARScannerView.mcTriTable[cubeIdx]
+      while ti < tbl.count, tbl[ti] >= 0 {
+        indices.append(mcVert(Int(tbl[ti])))
+        indices.append(mcVert(Int(tbl[ti+1])))
+        indices.append(mcVert(Int(tbl[ti+2])))
+        ti += 3
+      }
+    }
+
+    guard !indices.isEmpty else { return nil }
+
+    let verts  = vertPos.map { SCNVector3($0.x, $0.y, $0.z) }
+    let src    = SCNGeometrySource(vertices: verts)
+    let idxData = Data(bytes: indices, count: indices.count * 4)
+    let elem   = SCNGeometryElement(data: idxData, primitiveType: .triangles,
+                                    primitiveCount: indices.count / 3, bytesPerIndex: 4)
+    let geo    = SCNGeometry(sources: [src], elements: [elem])
+    let mat    = SCNMaterial()
+    mat.diffuse.contents = UIColor.systemGreen.withAlphaComponent(0.55)
+    mat.isDoubleSided    = true
+    mat.lightingModel    = .constant
+    geo.materials = [mat]
+    return geo
   }
 
   // MARK: - PCA Normal Estimation
@@ -391,7 +493,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
-    let filtered = voxels.filter { $0.value.count >= 8 }
+    let filtered = voxels.filter { $0.value.count >= 5 }
     guard !filtered.isEmpty else {
       throw NSError(domain: "Scan", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
@@ -417,7 +519,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
 
     // ── 4. Build Poisson grid ──────────────────────────────────────────────
-    let gridStep: Float = voxelSize * 1.5   // 3 mm grid for 2 mm voxels
+    let gridStep: Float = voxelSize * 2.0   // 6 mm grid for 3 mm voxels
     var minP = SIMD3<Float>(repeating:  Float.infinity)
     var maxP = SIMD3<Float>(repeating: -Float.infinity)
     for p in points { minP = simd_min(minP, p); maxP = simd_max(maxP, p) }
