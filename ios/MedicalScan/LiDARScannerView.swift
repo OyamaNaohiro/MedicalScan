@@ -417,7 +417,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
 
     // ── 4. Build Poisson grid ──────────────────────────────────────────────
-    let gridStep: Float = voxelSize * 3.0   // 6 mm grid for 2 mm voxels
+    let gridStep: Float = voxelSize * 1.5   // 3 mm grid for 2 mm voxels
     var minP = SIMD3<Float>(repeating:  Float.infinity)
     var maxP = SIMD3<Float>(repeating: -Float.infinity)
     for p in points { minP = simd_min(minP, p); maxP = simd_max(maxP, p) }
