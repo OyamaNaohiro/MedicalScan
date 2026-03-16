@@ -495,7 +495,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   private func buildRealtimeMesh(
     _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)]
   ) -> SCNGeometry? {
-    let occupied = Set(voxels.filter { $0.value.count >= 3 }.keys)
+    let occupied = Set(voxels.filter { $0.value.count >= 6 }.keys)
     guard occupied.count > 10 else { return nil }
 
     let mcCorners: [SIMD3<Int32>] = [
@@ -609,7 +609,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
-    let filtered = voxels.filter { $0.value.count >= 6 }
+    let filtered = voxels.filter { $0.value.count >= 12 }
     guard !filtered.isEmpty else {
       throw NSError(domain: "Scan", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
@@ -801,6 +801,29 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
     let lambda: Float = 0.5, mu: Float = -0.53
     for _ in 0..<2 { smoothStep(factor: lambda); smoothStep(factor: mu) }
+
+    // ── 10.5 Density-based trimming ───────────────────
+    // Remove triangles whose vertices fall in low-density voxel regions
+    // (edge bleeding artifacts, ghost surfaces from tracking drift)
+    let densityR: Int32 = 2   // search 5x5x5 neighborhood
+    let densityMin: Float = 50 // min total count-sum in neighborhood
+    func voxelDensity(_ p: SIMD3<Float>) -> Float {
+      let k = SIMD3<Int32>(
+        Int32(floor(p.x / voxelSize)),
+        Int32(floor(p.y / voxelSize)),
+        Int32(floor(p.z / voxelSize)))
+      var d: Float = 0
+      for dz in -densityR...densityR { for dy in -densityR...densityR { for dx in -densityR...densityR {
+        let nk = SIMD3<Int32>(k.x+Int32(dx), k.y+Int32(dy), k.z+Int32(dz))
+        if let v = filtered[nk] { d += Float(v.count) }
+      }}}
+      return d
+    }
+    triIdx = triIdx.filter { (i0, i1, i2) in
+      voxelDensity(vertPos[i0]) >= densityMin &&
+      voxelDensity(vertPos[i1]) >= densityMin &&
+      voxelDensity(vertPos[i2]) >= densityMin
+    }
 
     // ── 11. Orient normals outward (open mesh, single-sided) ──────────────
     let meshCentroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
