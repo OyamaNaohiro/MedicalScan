@@ -519,7 +519,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
 
     // ── 4. Build Poisson grid ──────────────────────────────────────────────
-    let gridStep: Float = voxelSize * 2.0   // 6 mm grid for 3 mm voxels
+    let gridStep: Float = voxelSize * 1.5   // 4.5 mm grid for 3 mm voxels
     var minP = SIMD3<Float>(repeating:  Float.infinity)
     var maxP = SIMD3<Float>(repeating: -Float.infinity)
     for p in points { minP = simd_min(minP, p); maxP = simd_max(maxP, p) }
@@ -562,7 +562,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     // ── 6. Poisson solve: ∇²f = rhs (Gauss-Seidel, 80 iterations) ─────────
     var f = [Float](repeating: 0, count: cellCount)
     let h2 = gridStep * gridStep
-    for _ in 0..<80 {
+    for _ in 0..<120 {
       for iz in 1..<gz-1 { for iy in 1..<gy-1 { for ix in 1..<gx-1 {
         let i = fi(ix, iy, iz)
         f[i] = (f[i+1]+f[i-1]+f[i+strideY]+f[i-strideY]+f[i+strideZ]+f[i-strideZ] - h2*rhs[i]) / 6
@@ -684,7 +684,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<4 { smoothStep(factor: lambda); smoothStep(factor: mu) }
+    for _ in 0..<2 { smoothStep(factor: lambda); smoothStep(factor: mu) }
 
     // ── 11. Orient normals outward (open mesh, single-sided) ──────────────
     let meshCentroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
