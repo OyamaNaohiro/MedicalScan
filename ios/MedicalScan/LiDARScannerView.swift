@@ -15,7 +15,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - TrueDepth Object: world-space voxel fusion
   private let fusionQueue = DispatchQueue(label: "com.medicalscan.fusion", qos: .userInitiated)
   private var worldVoxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)] = [:]
-  private let voxelSize: Float = 0.0025       // 2.5 mm per voxel
+  private let voxelSize: Float = 0.0015       // 1.5 mm per voxel
   private var pointCloudNode: SCNNode?
   private var realtimeMeshNode: SCNNode?
   private var fusedFrameCount   = 0
@@ -609,7 +609,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
-    let filtered = voxels.filter { $0.value.count >= 8 }
+    let filtered = voxels.filter { $0.value.count >= 6 }
     guard !filtered.isEmpty else {
       throw NSError(domain: "Scan", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
@@ -635,7 +635,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     }
 
     // ── 4. Build Poisson grid ──────────────────────────────────────────────
-    let gridStep: Float = voxelSize * 2.0   // 5 mm grid for 2.5 mm voxels
+    let gridStep: Float = voxelSize * 2.0   // 3 mm grid for 1.5 mm voxels
     var minP = SIMD3<Float>(repeating:  Float.infinity)
     var maxP = SIMD3<Float>(repeating: -Float.infinity)
     for p in points { minP = simd_min(minP, p); maxP = simd_max(maxP, p) }
@@ -678,7 +678,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     // ── 6. Poisson solve: ∇²f = rhs (Gauss-Seidel, 80 iterations) ─────────
     var f = [Float](repeating: 0, count: cellCount)
     let h2 = gridStep * gridStep
-    for _ in 0..<100 {
+    for _ in 0..<150 {
       for iz in 1..<gz-1 { for iy in 1..<gy-1 { for ix in 1..<gx-1 {
         let i = fi(ix, iy, iz)
         f[i] = (f[i+1]+f[i-1]+f[i+strideY]+f[i-strideY]+f[i+strideZ]+f[i-strideZ] - h2*rhs[i]) / 6
@@ -800,7 +800,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       vertPos = next
     }
     let lambda: Float = 0.5, mu: Float = -0.53
-    for _ in 0..<3 { smoothStep(factor: lambda); smoothStep(factor: mu) }
+    for _ in 0..<2 { smoothStep(factor: lambda); smoothStep(factor: mu) }
 
     // ── 11. Orient normals outward (open mesh, single-sided) ──────────────
     let meshCentroid: SIMD3<Float> = vertPos.reduce(.zero, +) / Float(max(vertPos.count, 1))
