@@ -22,6 +22,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   private var lastVisualizeCount = 0
   private var lastMeshCount      = 0
 
+  // MARK: - Structure Sensor
+  private var structureCaptureSession: AnyObject? = nil  // STCaptureSession when SDK available
+
   // MARK: - React Props
 
   @objc var showMeshOverlay: Bool = true
@@ -65,7 +68,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       let mode        = scannerMode
       let meshAnchors = collectedMeshAnchors
 
-      if mode == "trueDepthObject" {
+      if mode == "trueDepthObject" || mode == "structureSensor" {
         fusionQueue.async { [weak self] in
           guard let self = self else { return }
           let snapshot = self.worldVoxels
@@ -174,6 +177,16 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       config.isLightEstimationEnabled = false
       sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
 
+    } else if scannerMode == "structureSensor" {
+      // ARKit for camera preview + pose; Structure SDK provides depth
+      let config = ARWorldTrackingConfiguration()
+      sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
+      #if canImport(Structure)
+      startStructureCaptureSession()
+      #else
+      ScanEventEmitter.emitEvent(["type": "error",
+        "message": "Structure SDKが未統合です。Structure.frameworkをXcodeプロジェクトに追加してください。"])
+      #endif
     } else {
       guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
         ScanEventEmitter.emitEvent(["type": "error",
@@ -190,6 +203,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
   private func pauseARSession() {
     guard isSessionRunning else { return }
+    #if canImport(Structure)
+    if scannerMode == "structureSensor" { stopStructureCaptureSession() }
+    #endif
     sceneView.session.pause()
     DispatchQueue.main.async { [weak self] in
       self?.pointCloudNode?.removeFromParentNode()
@@ -906,6 +922,20 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     return geo
   }
 
+  // MARK: - Structure Sensor helpers (called from conditional extension below)
+
+  func startStructureCaptureSession() {
+    #if canImport(Structure)
+    _startStructureCapture()
+    #endif
+  }
+
+  func stopStructureCaptureSession() {
+    #if canImport(Structure)
+    _stopStructureCapture()
+    #endif
+  }
+
   // MARK: - Marching Cubes lookup table (Lorensen & Cline 1987 / Bourke)
   private static let mcTriTable: [[Int8]] = [
     [-1],
@@ -1223,3 +1253,149 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     return url.path
   }
 }
+
+
+// MARK: - Structure SDK Integration
+// Requires Structure.framework from https://developer.structure.io
+// Add to Xcode: Build Phases > Link Binary With Libraries
+// Add to Info.plist: UISupportedExternalAccessoryProtocols = ["io.structure.control"]
+
+#if canImport(Structure)
+import Structure
+
+extension LiDARScannerView: STCaptureSessionDelegate {
+
+  // MARK: Start / Stop
+
+  func _startStructureCapture() {
+    guard let session = STCaptureSession.new() else {
+      ScanEventEmitter.emitEvent(["type": "error",
+        "message": "StructureＳｅｎｓｏｒの初期化に失敗しました。"])
+      return
+    }
+    session.delegate = self
+    session.properties = STCaptureSessionPropertiesFromDictionary([
+      kSTCaptureSessionPropertyMaxFrameRate: 30,
+      kSTCaptureSessionPropertyDepthSensorEnabled: true,
+      kSTCaptureSessionPropertyDepthSensorVGAEnabled: true,
+      kSTCaptureSessionPropertyColorCameraEnabled: false,
+    ])
+    structureCaptureSession = session
+    do {
+      try session.startStreaming()
+    } catch {
+      ScanEventEmitter.emitEvent(["type": "error",
+        "message": "Structure Sensorストリーミング開始失敗: \(error.localizedDescription)"])
+    }
+  }
+
+  func _stopStructureCapture() {
+    (structureCaptureSession as? STCaptureSession)?.stopStreaming()
+    structureCaptureSession = nil
+  }
+
+  // MARK: STCaptureSessionDelegate
+
+  func captureSession(_ captureSession: STCaptureSession!,
+                      didOutputDepth depthFrame: STDepthFrame!,
+                      colorFrame: STColorFrame!) {
+    guard isScanning, scannerMode == "structureSensor" else { return }
+    guard let depthFrame = depthFrame else { return }
+
+    // Get current camera pose from ARKit
+    let transform = sceneView.session.currentFrame?.camera.transform
+                    ?? matrix_identity_float4x4
+
+    let intr = depthFrame.intrinsics
+    let w    = Int(depthFrame.width)
+    let h    = Int(depthFrame.height)
+
+    // Copy depth buffer to avoid dangling pointer on queue
+    let count = w * h
+    var depthCopy = [Float](repeating: 0, count: count)
+    if let ptr = depthFrame.depthAsMillimeters {
+      depthCopy.withUnsafeMutableBufferPointer { buf in
+        buf.baseAddress!.initialize(from: ptr, count: count)
+      }
+    }
+
+    fusionQueue.async { [weak self] in
+      self?.integrateStructureDepth(
+        depths: depthCopy, width: w, height: h,
+        fx: intr.fx, fy: intr.fy, cx: intr.cx, cy: intr.cy,
+        cameraTransform: transform)
+    }
+  }
+
+  func captureSession(_ captureSession: STCaptureSession!,
+                      didFail error: Error!) {
+    ScanEventEmitter.emitEvent(["type": "error",
+      "message": "Structure Sensorエラー: \(error.localizedDescription)"])
+  }
+
+  func captureSessionSensorDidDisconnect(_ captureSession: STCaptureSession!) {
+    ScanEventEmitter.emitEvent(["type": "error",
+      "message": "Structure Sensorが接綻されていません。接続してから再試行してください。"])
+  }
+
+  // MARK: Depth Integration
+
+  private func integrateStructureDepth(
+      depths: [Float], width: Int, height: Int,
+      fx: Float, fy: Float, cx: Float, cy: Float,
+      cameraTransform: simd_float4x4) {
+
+    let dMinM: Float = 0.10   // 10 cm
+    let dMaxM: Float = 1.20   // 120 cm
+    let alpha: Float = 0.15
+    let rejectDist = voxelSize * 3.0
+    let step = 3  // sample every 3rd pixel
+
+    for py in Swift.stride(from: 0, to: height, by: step) {
+      for px in Swift.stride(from: 0, to: width, by: step) {
+        let depthMM = depths[py * width + px]
+        let d = depthMM / 1000.0
+        guard d.isFinite, d > dMinM, d < dMaxM else { continue }
+
+        let lx = (Float(px) - cx) * d / fx
+        let ly = (Float(py) - cy) * d / fy
+        let world4 = cameraTransform * SIMD4<Float>(lx, ly, d, 1)
+        let world = SIMD3<Float>(world4.x, world4.y, world4.z)
+
+        let ki = SIMD3<Int32>(
+          Int32(floor(world.x / voxelSize)),
+          Int32(floor(world.y / voxelSize)),
+          Int32(floor(world.z / voxelSize)))
+
+        if let existing = worldVoxels[ki] {
+          guard simd_length(world - existing.center) < rejectDist else { continue }
+          worldVoxels[ki] = (
+            center: existing.center * (1 - alpha) + world * alpha,
+            count:  existing.count + 1)
+        } else {
+          let center = SIMD3<Float>(
+            (Float(ki.x) + 0.5) * voxelSize,
+            (Float(ki.y) + 0.5) * voxelSize,
+            (Float(ki.z) + 0.5) * voxelSize)
+          worldVoxels[ki] = (center: center, count: 1)
+        }
+      }
+    }
+
+    fusedFrameCount += 1
+    if fusedFrameCount - lastMeshCount >= 60 {
+      lastMeshCount = fusedFrameCount
+      let snapshot = worldVoxels
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self, self.showMeshOverlay else { return }
+        self.realtimeMeshNode?.removeFromParentNode()
+        if let geo = self.buildRealtimeMesh(snapshot) {
+          let node = SCNNode(geometry: geo)
+          self.sceneView.scene.rootNode.addChildNode(node)
+          self.realtimeMeshNode = node
+        }
+      }
+    }
+  }
+}
+#endif

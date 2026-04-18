@@ -1,7 +1,7 @@
 import React from 'react';
 import {requireNativeComponent, ViewStyle, Platform, View} from 'react-native';
 
-export type ScannerMode = 'lidar' | 'trueDepthObject';
+export type ScannerMode = 'lidar' | 'trueDepthObject' | 'structureSensor';
 
 interface LiDARScannerViewProps {
   style?: ViewStyle;

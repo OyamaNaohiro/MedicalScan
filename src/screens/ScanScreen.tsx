@@ -121,13 +121,42 @@ export default function ScanScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeCard,
+              scannerMode === 'structureSensor' && styles.modeCardActive,
+            ]}
+            onPress={() => setScannerMode('structureSensor')}>
+            <Text style={styles.modeCardIcon}>{'🔭'}</Text>
+            <Text
+              style={[
+                styles.modeCardTitle,
+                scannerMode === 'structureSensor' && styles.modeCardTitleActive,
+              ]}>
+              Structure Sensor
+            </Text>
+            <Text style={styles.modeCardDesc}>
+              外付け赤外線深度センサー{'\n'}高精度・近距離スキャン対応
+            </Text>
+            {scannerMode === 'structureSensor' && (
+              <View style={styles.modeCardCheck}>
+                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
           style={styles.proceedButton}
           onPress={() => setPhase('active')}>
           <Text style={styles.proceedButtonText}>
-            {scannerMode === 'lidar' ? 'LiDAR' : 'TrueDepth（物体）'}でスキャン開始
+            {scannerMode === 'lidar'
+              ? 'LiDAR'
+              : scannerMode === 'structureSensor'
+              ? 'Structure Sensor'
+              : 'TrueDepth（物体）'}
+            でスキャン開始
           </Text>
         </TouchableOpacity>
       </SafeAreaView>
