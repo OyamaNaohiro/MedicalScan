@@ -122,29 +122,18 @@ export default function ScanScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.modeCard,
-              scannerMode === 'structureSensor' && styles.modeCardActive,
-            ]}
-            onPress={() => setScannerMode('structureSensor')}>
+          <View style={[styles.modeCard, styles.modeCardDisabled]}>
             <Text style={styles.modeCardIcon}>{'🔭'}</Text>
-            <Text
-              style={[
-                styles.modeCardTitle,
-                scannerMode === 'structureSensor' && styles.modeCardTitleActive,
-              ]}>
+            <Text style={[styles.modeCardTitle, styles.modeCardTitleDisabled]}>
               Structure Sensor
             </Text>
             <Text style={styles.modeCardDesc}>
               外付け赤外線深度センサー{'\n'}高精度・近距離スキャン対応
             </Text>
-            {scannerMode === 'structureSensor' && (
-              <View style={styles.modeCardCheck}>
-                <Text style={styles.modeCardCheckText}>{'✓'}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+            <View style={styles.modeCardBadge}>
+              <Text style={styles.modeCardBadgeText}>準備中</Text>
+            </View>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -283,6 +272,26 @@ const styles = StyleSheet.create({
   },
   modeCardTitleActive: {
     color: '#007aff',
+  },
+  modeCardDisabled: {
+    opacity: 0.4,
+  },
+  modeCardTitleDisabled: {
+    color: '#555',
+  },
+  modeCardBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: '#444',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  modeCardBadgeText: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600',
   },
   modeCardDesc: {
     fontSize: 13,
