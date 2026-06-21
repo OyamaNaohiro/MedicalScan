@@ -63,12 +63,15 @@ struct CameraIntrinsics {
 /// 1 フレーム分の深度入力。フィルタ・TSDF・プレビューが共通で受け取る。
 /// GPU リソースは MTLTexture 参照のまま保持し、CPU へのコピーを避ける。
 struct DepthFrame {
-    /// 深度 [m]。r32Float。無効画素は 0 または NaN（有効性は config レンジで判定）。
-    let depth: MTLTexture
+    /// 深度 [m]。r32Float。無効画素は 0 または NaN（有効性は validMask / config レンジで判定）。
+    /// フィルタはコピーして depth を差し替えるため var。
+    var depth: MTLTexture
+    /// 有効画素マスク（r8Unorm: 1=有効）。ConfidenceFilter が生成。未生成なら nil。
+    var validMask: MTLTexture?
     /// LiDAR 時のみ存在する信頼度（0..2）。TrueDepth では nil（quality + レンジで代替）。
-    let confidence: MTLTexture?
+    var confidence: MTLTexture?
     /// 対応するカラー（RGBA）。プレビュー/カラーTSDF 用。未取得なら nil。
-    let color: MTLTexture?
+    var color: MTLTexture?
 
     /// 深度解像度に整合した内部パラメータ。
     let intrinsics: CameraIntrinsics
@@ -81,6 +84,9 @@ struct DepthFrame {
     let quality: Float
     let timestamp: TimeInterval
     let sensor: ScanSensor
+
+    /// 適用済みフィルタのビットフラグ（将来: TSDF 統合判断・品質メタに使用）。
+    var filterFlags: UInt32 = 0
 }
 
 // MARK: - ScanConfig（全パラメータの一元管理。一部は React から調整）

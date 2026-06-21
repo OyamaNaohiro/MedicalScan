@@ -7,5 +7,6 @@
 
 @property (nonatomic) BOOL isScanning;
 @property (nonatomic) NSInteger displayMode;
+@property (nonatomic) BOOL confidenceEnabled;
 
 @end

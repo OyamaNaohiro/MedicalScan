@@ -37,4 +37,9 @@
   [_impl setValue:@(displayMode) forKey:@"displayMode"];
 }
 
+- (void)setConfidenceEnabled:(BOOL)confidenceEnabled {
+  _confidenceEnabled = confidenceEnabled;
+  [_impl setValue:@(confidenceEnabled) forKey:@"confidenceEnabled"];
+}
+
 @end

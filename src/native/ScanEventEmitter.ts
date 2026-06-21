@@ -15,9 +15,11 @@ export type ScanEventPayload =
       validRatio: number;
       tracking: string;
       displayMode: number;
+      filterTimes: {[name: string]: number};
     }
   | {type: 'engineState'; state: string; tracking?: string}
-  | {type: 'engineError'; message: string};
+  | {type: 'engineError'; message: string}
+  | {type: 'engineLog'; kind: string; message: string};
 
 const {ScanEventEmitter: NativeScanEventEmitter} = NativeModules;
 

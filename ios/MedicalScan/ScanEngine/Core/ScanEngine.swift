@@ -20,8 +20,12 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     /// 状態変化通知（メインスレッドで呼ぶ）。
     var onState: ((ScanEngineState) -> Void)?
-    /// 1 フレーム処理完了通知（プレビュー描画用、メインスレッドで呼ぶ）。
-    var onFrame: ((DepthFrame) -> Void)?
+    /// 1 フレーム処理完了通知（raw=入力, filtered=フィルタ後）。プレビュー/比較表示用、メインで呼ぶ。
+    var onFrame: ((_ raw: DepthFrame, _ filtered: DepthFrame) -> Void)?
+    /// per-filter GPU 時間[ms]（completion handler 由来＝バックグラウンド）。
+    var onFilterGPUTime: ((_ name: String, _ ms: Double) -> Void)?
+    /// イベントログ（tracking/quality/dropped 等）。メインで呼ぶ。
+    var onEvent: ((_ kind: String, _ message: String) -> Void)?
 
     /// 状態はキャプチャキューとメインスレッドの双方から更新され得るため、ロックで保護する
     /// （Thread Sanitizer 対策）。読み取りは公開、更新は `setState` 経由（private）に限定する。
@@ -73,13 +77,20 @@ final class ScanEngine: DepthFrameSourceDelegate {
         self.source = source
         self.config = config
         self.source.delegate = self
+        // per-filter GPU 時間をそのまま外へ中継。
+        filterChain.onFilterGPUTime = { [weak self] name, ms in
+            self?.onFilterGPUTime?(name, ms)
+        }
     }
 
-    /// TrueDepth を既定ソースとして組み立てる簡易ファクトリ。
+    /// TrueDepth を既定ソースとし、標準フィルタ（Confidence）を組み込んで構築する。
     static func makeDefault(config: ScanConfig = ScanConfig()) -> ScanEngine? {
         guard let context = MetalContext() else { return nil }
         let source = TrueDepthSource(context: context)
-        return ScanEngine(context: context, source: source, config: config)
+        let engine = ScanEngine(context: context, source: source, config: config)
+        engine.filterChain.append(ConfidenceFilter(config: config))
+        // Phase 3b: BilateralFilter / TemporalFilter をここに append する。
+        return engine
     }
 
     // MARK: - 制御 API（Bridge から呼ばれる最小操作）
@@ -103,37 +114,32 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     func depthFrameSource(_ source: DepthFrameSource, didOutput frame: DepthFrame) {
         // 品質の低いフレームは早期に足切り（無駄な GPU 処理を避ける）。
-        guard frame.quality >= config.qualityMin else { return }
+        guard frame.quality >= config.qualityMin else {
+            DispatchQueue.main.async { [weak self] in
+                self?.onEvent?("depthQualityLow", "深度品質が低くフレームを破棄しました")
+            }
+            return
+        }
 
-        // フィルタ →（Phase 4: TSDF integrate）を 1 つの command buffer に積む。
-        let commandBuffer = context.commandQueue.makeCommandBuffer()
-        let processed = filterChain.process(frame,
-                                            commandBuffer: commandBuffer ?? dummyCommandBuffer(),
-                                            context: context)
-        // [Phase 4] tsdf?.integrate(processed, config: config, commandBuffer: commandBuffer)
-        commandBuffer?.commit()
+        // フィルタチェーン（各フィルタが専用 command buffer で encode/commit）。
+        let filtered = filterChain.process(frame, context: context)
+        // [Phase 4] tsdf?.integrate(filtered, config: config) ← ここに差し込むだけ
 
-        // プレビューへ（描画は View 側の責務）。
+        // プレビュー/比較へ（描画は View 側の責務）。raw と filtered を渡す。
         DispatchQueue.main.async { [weak self] in
-            self?.onFrame?(processed)
+            self?.onFrame?(frame, filtered)
         }
     }
 
     func depthFrameSource(_ source: DepthFrameSource, didChangeTracking trackingState: ScanTrackingState) {
         if case .stopped = state { return }
         setState(.running(tracking: trackingState))
+        DispatchQueue.main.async { [weak self] in
+            self?.onEvent?("tracking", "Tracking: \(trackingState.label)")
+        }
     }
 
     func depthFrameSource(_ source: DepthFrameSource, didFail error: Error) {
         setState(.failed(error.localizedDescription))
-    }
-
-    // MARK: - private
-
-    /// commandBuffer 生成に失敗した場合のフォールバック（実質到達しないが nil 回避）。
-    private func dummyCommandBuffer() -> MTLCommandBuffer {
-        // 生成失敗時はキューから再取得を試み、無ければ致命的状態へ。
-        if let cb = context.commandQueue.makeCommandBuffer() { return cb }
-        fatalError("MTLCommandBuffer を生成できません")
     }
 }

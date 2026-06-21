@@ -20,6 +20,8 @@ final class ScanEnginePreviewView: MTKView {
         var mode: UInt32
         var orientation: UInt32
         var mirror: UInt32
+        var hasFiltered: UInt32
+        var hasMask: UInt32
     }
 
     // MARK: - 公開設定
@@ -38,7 +40,9 @@ final class ScanEnginePreviewView: MTKView {
 
     private let context: MetalContext
     private var pipeline: MTLRenderPipelineState?
-    private var latestDepth: MTLTexture?
+    private var rawDepth: MTLTexture?
+    private var filteredDepth: MTLTexture?
+    private var validMask: MTLTexture?
     private let fpsCounter = RateCounter(alpha: 0.15)
 
     // MARK: - Init
@@ -75,9 +79,16 @@ final class ScanEnginePreviewView: MTKView {
 
     // MARK: - 入力（描画のみ）
 
-    /// 新しい深度フレームを受け取り、再描画を要求する。
-    func update(depth: MTLTexture, depthMin: Float, depthMax: Float) {
-        self.latestDepth = depth
+    /// 新しいフレームを受け取り、再描画を要求する。
+    /// - Parameters:
+    ///   - raw: 入力深度（Raw/Difference 用、常に存在）
+    ///   - filtered: フィルタ後深度（Filtered/Difference 用、無ければ nil）
+    ///   - mask: 有効画素マスク（ValidMask 用、無ければ nil）
+    func update(raw: MTLTexture, filtered: MTLTexture?, mask: MTLTexture?,
+                depthMin: Float, depthMax: Float) {
+        self.rawDepth = raw
+        self.filteredDepth = filtered
+        self.validMask = mask
         self.depthMin = depthMin
         self.depthMax = depthMax
         setNeedsDisplay()
@@ -92,7 +103,7 @@ extension ScanEnginePreviewView: MTKViewDelegate {
 
     func draw(in view: MTKView) {
         guard let pipeline,
-              let depth = latestDepth,
+              let raw = rawDepth,
               let drawable = currentDrawable,
               let passDescriptor = currentRenderPassDescriptor,
               let commandBuffer = context.commandQueue.makeCommandBuffer(),
@@ -100,13 +111,18 @@ extension ScanEnginePreviewView: MTKViewDelegate {
             return
         }
 
+        // nil テクスチャは raw で代替バインド（必ず実テクスチャを束ねる）。フラグで有無を伝える。
         var uniforms = PreviewUniforms(depthMin: depthMin, depthMax: depthMax,
                                        mode: UInt32(displayMode.rawValue),
                                        orientation: orientation,
-                                       mirror: mirror ? 1 : 0)
+                                       mirror: mirror ? 1 : 0,
+                                       hasFiltered: filteredDepth != nil ? 1 : 0,
+                                       hasMask: validMask != nil ? 1 : 0)
 
         encoder.setRenderPipelineState(pipeline)
-        encoder.setFragmentTexture(depth, index: 0)
+        encoder.setFragmentTexture(raw, index: 0)
+        encoder.setFragmentTexture(filteredDepth ?? raw, index: 1)
+        encoder.setFragmentTexture(validMask ?? raw, index: 2)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PreviewUniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()

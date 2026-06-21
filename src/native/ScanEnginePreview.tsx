@@ -6,12 +6,14 @@ export enum DepthDisplayMode {
   RawDepth = 0,
   ValidMask = 1,
   Filtered = 2,
+  Difference = 3,
 }
 
 interface ScanEnginePreviewProps {
   style?: ViewStyle;
   isScanning?: boolean;
   displayMode?: DepthDisplayMode;
+  confidenceEnabled?: boolean;
 }
 
 const NativeScanEngineView =
@@ -27,6 +29,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   style,
   isScanning = false,
   displayMode = DepthDisplayMode.Filtered,
+  confidenceEnabled = true,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -36,6 +39,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       style={style}
       isScanning={isScanning}
       displayMode={displayMode}
+      confidenceEnabled={confidenceEnabled}
     />
   );
 };

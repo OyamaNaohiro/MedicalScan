@@ -34,9 +34,11 @@ vertex VertexOut depthPreviewVertex(uint vid [[vertex_id]]) {
 struct PreviewUniforms {
     float depthMin;     // 有効レンジ下限 [m]
     float depthMax;     // 有効レンジ上限 [m]
-    uint  mode;         // 0:raw 1:validMask 2:filtered
+    uint  mode;         // 0:raw 1:validMask 2:filtered 3:difference
     uint  orientation;  // 0,1,2,3 = 90度回転ステップ
     uint  mirror;       // 0/1 水平反転
+    uint  hasFiltered;  // filtered テクスチャが有効か
+    uint  hasMask;      // validMask テクスチャが有効か
 };
 
 // 深度センサー（横長）→ ポートレート表示のための uv 補正。
@@ -63,24 +65,38 @@ static float3 colormap(float t) {
 }
 
 fragment float4 depthPreviewFragment(VertexOut in [[stage_in]],
-                                     texture2d<float, access::sample> depthTex [[texture(0)]],
+                                     texture2d<float, access::sample> rawTex      [[texture(0)]],
+                                     texture2d<float, access::sample> filteredTex [[texture(1)]],
+                                     texture2d<float, access::sample> maskTex     [[texture(2)]],
                                      constant PreviewUniforms& u [[buffer(0)]]) {
     constexpr sampler s(address::clamp_to_edge, filter::nearest);
     float2 uv = orientUV(in.uv, u.orientation, u.mirror);
-    float d = depthTex.sample(s, uv).r;
 
-    bool valid = isfinite(d) && d >= u.depthMin && d <= u.depthMax;
-    float t = (d - u.depthMin) / max(1e-4, (u.depthMax - u.depthMin));
+    float dr = rawTex.sample(s, uv).r;
+    float df = (u.hasFiltered != 0) ? filteredTex.sample(s, uv).r : dr;
+    float invRange = 1.0 / max(1e-4, (u.depthMax - u.depthMin));
 
     if (u.mode == 1) {
-        // Valid Mask: 有効=緑, 無効=暗色
+        // Valid Mask: validMask があればそれを、無ければレンジ判定を使う
+        bool valid = (u.hasMask != 0)
+            ? (maskTex.sample(s, uv).r > 0.5)
+            : (isfinite(dr) && dr >= u.depthMin && dr <= u.depthMax);
         return valid ? float4(0.1, 0.9, 0.3, 1.0) : float4(0.08, 0.08, 0.10, 1.0);
     } else if (u.mode == 2) {
-        // Filtered: 有効画素のみカラーマップ、無効は黒
-        return valid ? float4(colormap(t), 1.0) : float4(0.0, 0.0, 0.0, 1.0);
+        // Filtered: 有効画素のみカラーマップ、無効(NaN)は黒
+        if (!isfinite(df)) { return float4(0.0, 0.0, 0.0, 1.0); }
+        float t = (df - u.depthMin) * invRange;
+        return float4(colormap(t), 1.0);
+    } else if (u.mode == 3) {
+        // Difference: |raw - filtered| を強調表示（mm 単位の差をスケール）
+        if (!isfinite(dr) || !isfinite(df)) { return float4(0.0, 0.0, 0.0, 1.0); }
+        float diff = fabs(dr - df);
+        float t = clamp(diff / 0.01, 0.0, 1.0);   // 0〜10mm を 0..1 に
+        return float4(colormap(t), 1.0);
     } else {
         // Raw: NaN/Inf のみ黒。レンジ外も含めカラーマップ表示
-        if (!isfinite(d)) { return float4(0.0, 0.0, 0.0, 1.0); }
+        if (!isfinite(dr)) { return float4(0.0, 0.0, 0.0, 1.0); }
+        float t = (dr - u.depthMin) * invRange;
         return float4(colormap(t), 1.0);
     }
 }

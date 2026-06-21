@@ -12,6 +12,7 @@ interface Metrics {
   cpuMs: number;
   validRatio: number;
   tracking: string;
+  filterTimes: {[name: string]: number};
 }
 
 const EMPTY: Metrics = {
@@ -21,19 +22,23 @@ const EMPTY: Metrics = {
   cpuMs: 0,
   validRatio: 0,
   tracking: '-',
+  filterTimes: {},
 };
 
 const MODES: {label: string; value: DepthDisplayMode}[] = [
   {label: 'Raw', value: DepthDisplayMode.RawDepth},
   {label: 'Mask', value: DepthDisplayMode.ValidMask},
   {label: 'Filtered', value: DepthDisplayMode.Filtered},
+  {label: 'Diff', value: DepthDisplayMode.Difference},
 ];
 
 export default function ScanEngineScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [mode, setMode] = useState<DepthDisplayMode>(DepthDisplayMode.Filtered);
+  const [confidenceOn, setConfidenceOn] = useState(true);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
+  const [lastEvent, setLastEvent] = useState<string>('');
 
   // 画面を離れたらスキャンを止める
   useFocusEffect(
@@ -55,7 +60,10 @@ export default function ScanEngineScreen() {
           cpuMs: event.cpuMs,
           validRatio: event.validRatio,
           tracking: event.tracking,
+          filterTimes: event.filterTimes ?? {},
         });
+      } else if (event.type === 'engineLog') {
+        setLastEvent(`${event.kind}: ${event.message}`);
       } else if (event.type === 'engineError') {
         setEngineError(event.message);
         setIsScanning(false);
@@ -70,20 +78,26 @@ export default function ScanEngineScreen() {
         style={styles.preview}
         isScanning={isScanning}
         displayMode={mode}
+        confidenceEnabled={confidenceOn}
       />
 
       {/* デバッグ HUD */}
       <View style={styles.hud} pointerEvents="none">
-        <Text style={styles.hudTitle}>ScanEngine (Phase 2b)</Text>
+        <Text style={styles.hudTitle}>ScanEngine (Phase 3a)</Text>
         <HudRow label="Render FPS" value={metrics.renderFPS.toFixed(1)} />
         <HudRow label="Depth FPS" value={metrics.depthFPS.toFixed(1)} />
         <HudRow label="GPU" value={`${metrics.gpuMs.toFixed(2)} ms`} />
         <HudRow label="CPU" value={`${metrics.cpuMs.toFixed(2)} ms`} />
         <HudRow
+          label="Conf GPU"
+          value={`${(metrics.filterTimes.Confidence ?? 0).toFixed(2)} ms`}
+        />
+        <HudRow
           label="Valid px"
           value={`${(metrics.validRatio * 100).toFixed(1)} %`}
         />
         <HudRow label="Tracking" value={metrics.tracking} />
+        {lastEvent !== '' && <Text style={styles.hudEvent}>{lastEvent}</Text>}
       </View>
 
       {engineError && (
@@ -91,6 +105,17 @@ export default function ScanEngineScreen() {
           <Text style={styles.errorText}>{engineError}</Text>
         </View>
       )}
+
+      {/* フィルタ ON/OFF */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[styles.filterChip, confidenceOn && styles.filterChipActive]}
+          onPress={() => setConfidenceOn(prev => !prev)}>
+          <Text style={[styles.filterText, confidenceOn && styles.filterTextActive]}>
+            Confidence {confidenceOn ? 'ON' : 'OFF'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* 表示モード切替 */}
       <View style={styles.modeRow}>
@@ -156,6 +181,24 @@ const styles = StyleSheet.create({
   },
   hudLabel: {color: '#aaa', fontSize: 12, marginRight: 12},
   hudValue: {color: '#fff', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
+  hudEvent: {color: '#ffd60a', fontSize: 11, marginTop: 6, maxWidth: 200},
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 10,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#555',
+  },
+  filterChipActive: {backgroundColor: '#0a84ff', borderColor: '#0a84ff'},
+  filterText: {color: '#bbb', fontSize: 12, fontWeight: '600'},
+  filterTextActive: {color: '#fff'},
   errorBox: {
     position: 'absolute',
     top: 16,

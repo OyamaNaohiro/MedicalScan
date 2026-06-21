@@ -3,49 +3,74 @@
 //  ScanEngine / Filtering
 //
 //  深度フィルタの抽象と、それを順に適用するチェーン。
-//  Confidence / Bilateral / Temporal などを「追加するだけ」で拡張できる構造（Phase 3 で実装）。
+//  各フィルタは enabled / priority / name を持ち、append / remove / reorder 可能。
 //
-//  設計意図:
-//   - 各フィルタは 1 つの commandBuffer に encode し、入力 DepthFrame を受けて
-//     （多くは depth テクスチャを差し替えた）新しい DepthFrame を返す純粋な変換とする。
-//   - チェーンは順序付きリスト。TSDF integrate はこのチェーンの出力を受け取る位置に入るため、
-//     フィルタを増減しても下流は無変更（Open/Closed）。
+//  GPU 計測方針（確定）: per-filter の GPU 時間を取るため、フィルタごとに専用 command buffer を
+//  生成して commit する。同一 command queue 上で commit 順に直列実行されるため、前段の出力テクスチャ
+//  への書き込みは後段の読み取り前に完了する（リソースハザードは順序保証で安全）。
+//  GPU 時間は completion handler で gpuEndTime-gpuStartTime を読み、onFilterGPUTime で通知する。
 //
 
 import Metal
+import QuartzCore
 
 /// 深度フレームを GPU 上で変換する 1 段。
 protocol DepthFilter: AnyObject {
-    /// フィルタ名（デバッグ/プロファイル用）。
+    /// 表示・計測用の名前。
     var name: String { get }
+    /// 無効化すると process でスキップされる。
+    var isEnabled: Bool { get set }
+    /// 適用順（小さいほど先）。Confidence=10, Bilateral=20, Temporal=30 を想定。
+    var priority: Int { get }
 
-    /// `frame` を変換して返す。GPU 処理は `commandBuffer` に encode する（commit はチェーン側）。
-    /// 出力テクスチャは `context.texturePool` から借りること（再確保を避ける）。
-    func process(_ frame: DepthFrame,
-                 commandBuffer: MTLCommandBuffer,
-                 context: MetalContext) -> DepthFrame
+    /// `frame` を変換し、与えられた `commandBuffer` に GPU 処理を encode して返す。
+    /// 出力テクスチャは `context.texturePool` から借りる（毎フレーム確保を避ける）。
+    func encode(_ frame: DepthFrame,
+                commandBuffer: MTLCommandBuffer,
+                context: MetalContext) -> DepthFrame
 }
 
-/// フィルタを順に適用するパイプライン。
+/// フィルタを優先度順に適用するパイプライン。
 final class DepthFilterChain {
 
-    private(set) var filters: [DepthFilter] = []
+    private var filters: [DepthFilter] = []
 
-    /// 末尾に追加（適用順 = 追加順）。
+    /// per-filter の GPU 時間[ms] 通知（completion handler から呼ぶ＝バックグラウンドスレッド）。
+    var onFilterGPUTime: ((_ name: String, _ ms: Double) -> Void)?
+
+    // MARK: - 構成変更
+
     func append(_ filter: DepthFilter) { filters.append(filter) }
 
-    /// すべて削除。
+    func remove(named name: String) { filters.removeAll { $0.name == name } }
+
+    func filter(named name: String) -> DepthFilter? { filters.first { $0.name == name } }
+
+    /// 有効/無効の切替（存在しなければ無視）。
+    func setEnabled(_ enabled: Bool, for name: String) {
+        filters.first { $0.name == name }?.isEnabled = enabled
+    }
+
     func removeAll() { filters.removeAll() }
 
     var isEmpty: Bool { filters.isEmpty }
 
-    /// チェーンを適用。空なら入力をそのまま返す（GPU 処理なし）。
-    func process(_ frame: DepthFrame,
-                 commandBuffer: MTLCommandBuffer,
-                 context: MetalContext) -> DepthFrame {
+    // MARK: - 適用
+
+    /// 有効フィルタを priority 昇順で適用。各フィルタは専用 command buffer で encode/commit する。
+    func process(_ frame: DepthFrame, context: MetalContext) -> DepthFrame {
+        let active = filters.filter { $0.isEnabled }.sorted { $0.priority < $1.priority }
         var current = frame
-        for filter in filters {
-            current = filter.process(current, commandBuffer: commandBuffer, context: context)
+        for filter in active {
+            guard let cb = context.commandQueue.makeCommandBuffer() else { continue }
+            cb.label = filter.name
+            current = filter.encode(current, commandBuffer: cb, context: context)
+            let name = filter.name
+            cb.addCompletedHandler { [weak self] buffer in
+                let ms = (buffer.gpuEndTime - buffer.gpuStartTime) * 1000.0
+                self?.onFilterGPUTime?(name, ms)
+            }
+            cb.commit()
         }
         return current
     }

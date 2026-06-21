@@ -12,9 +12,10 @@ import QuartzCore
 
 /// プレビューの可視化モード。RN からは Int で受け取る。
 enum DepthDisplayMode: Int {
-    case rawDepth  = 0   // 生の深度をカラーマップ（マスクなし）
-    case validMask = 1   // 有効/無効の2値マスク
-    case filtered  = 2   // 有効画素のみ深度カラーマップ（フィルタ後の見え方）
+    case rawDepth   = 0   // 生の深度をカラーマップ（マスクなし）
+    case validMask  = 1   // 有効/無効の2値マスク
+    case filtered   = 2   // 有効画素のみ深度カラーマップ（フィルタ後の見え方）
+    case difference = 3   // |raw - filtered| の差分表示
 }
 
 // MARK: - 計測値
@@ -28,6 +29,8 @@ struct ScanMetrics {
     var validRatio: Double = 0     // 有効画素率 0..1
     var tracking: ScanTrackingState = .notAvailable
     var displayMode: DepthDisplayMode = .filtered
+    /// フィルタ名 → 直近 GPU 時間[ms]（Confidence/Bilateral/Temporal）。
+    var filterTimes: [String: Double] = [:]
 
     /// ScanEventEmitter で RN へ送るための辞書表現（軽量・数値のみ）。
     var dictionary: [String: Any] {
@@ -40,6 +43,7 @@ struct ScanMetrics {
             "validRatio": validRatio,
             "tracking": tracking.label,
             "displayMode": displayMode.rawValue,
+            "filterTimes": filterTimes,
         ]
     }
 }
