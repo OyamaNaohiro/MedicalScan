@@ -894,10 +894,18 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - LiDAR Overlay Geometry
 
   private func lidarGeometry(_ meshGeometry: ARMeshGeometry) -> SCNGeometry {
-    let vCount = meshGeometry.vertices.count
-    let vPtr   = meshGeometry.vertices.buffer.contents()
-      .bindMemory(to: SIMD3<Float>.self, capacity: vCount)
-    let verts  = (0..<vCount).map { SCNVector3(vPtr[$0].x, vPtr[$0].y, vPtr[$0].z) }
+    // ARMeshGeometry vertices are packed float3 (12-byte stride), NOT SIMD3<Float>
+    // (16-byte stride). Reading with the source's real stride/offset and 3 individual
+    // floats avoids the buffer overrun that crashes with EXC_BAD_ACCESS.
+    let vSrc    = meshGeometry.vertices
+    let vCount  = vSrc.count
+    let vBase   = vSrc.buffer.contents()
+    let vStride = vSrc.stride
+    let vOffset = vSrc.offset
+    let verts   = (0..<vCount).map { i -> SCNVector3 in
+      let p = vBase.advanced(by: vOffset + i * vStride).assumingMemoryBound(to: Float.self)
+      return SCNVector3(p[0], p[1], p[2])
+    }
     let src    = SCNGeometrySource(vertices: verts)
 
     let fCount = meshGeometry.faces.count
@@ -1204,10 +1212,16 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     for anchor in anchors {
       let g         = anchor.geometry
       let transform = anchor.transform
-      let vCount    = g.vertices.count
-      let vPtr      = g.vertices.buffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: vCount)
+      // Read with the source's real stride/offset (packed float3 = 12 bytes), not the
+      // 16-byte SIMD3<Float> stride, to avoid a buffer overrun / corrupted geometry.
+      let vSrc      = g.vertices
+      let vCount    = vSrc.count
+      let vBase     = vSrc.buffer.contents()
+      let vStride   = vSrc.stride
+      let vOffset   = vSrc.offset
       let verts     = (0..<vCount).map { i -> SIMD3<Float> in
-        let w = transform * SIMD4<Float>(vPtr[i].x, vPtr[i].y, vPtr[i].z, 1)
+        let p = vBase.advanced(by: vOffset + i * vStride).assumingMemoryBound(to: Float.self)
+        let w = transform * SIMD4<Float>(p[0], p[1], p[2], 1)
         return SIMD3<Float>(w.x, w.y, w.z)
       }
       let fCount = g.faces.count
