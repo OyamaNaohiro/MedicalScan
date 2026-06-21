@@ -1386,7 +1386,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       }
       guard !idx.isEmpty else { continue }
       keptTriangles += idx.count / 3
-      if let mesh = buildMDLMesh(verts, idx, vCount, allocator) { asset.add(mesh) }
+      if let mesh = buildMDLMesh(verts, idx, vCount, allocator) {
+        // ARKit's LiDAR mesh is coarse (fixed resolution). Refine each anchor with one
+        // level of Catmull-Clark subdivision so faces become finer and smoother.
+        let refined = MDLMesh.newSubdividedMesh(mesh, submeshIndex: 0, subdivisionLevels: 1) ?? mesh
+        asset.add(refined)
+      }
     }
     guard keptTriangles > 0 else {
       throw NSError(domain: "Scan", code: 4, userInfo: [

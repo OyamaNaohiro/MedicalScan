@@ -470,14 +470,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#007aff',
   },
   boxPanel: {
-    position: 'absolute',
-    bottom: 110,
-    alignSelf: 'center',
-    width: '90%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 16,
     gap: 8,
   },
   boxHintText: {
