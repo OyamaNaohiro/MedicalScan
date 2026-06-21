@@ -41,6 +41,11 @@ workflows:
         script: |
           cd ios
           pod install
+      - name: Download Metal Toolchain
+        script: |
+          # Xcode 26 では Metal Toolchain が別コンポーネント化され既定で未インストール。
+          # .metal のコンパイル(CompileMetalFile)に必須なので取得する。
+          xcodebuild -downloadComponent MetalToolchain
       - name: Build iOS
         script: |
           xcode-project use-profiles
