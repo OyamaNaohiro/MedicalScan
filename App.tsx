@@ -5,6 +5,7 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import ScanScreen from './src/screens/ScanScreen';
+import ScanEngineScreen from './src/screens/ScanEngineScreen';
 import FilesScreen from './src/screens/FilesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
@@ -38,6 +39,15 @@ function App() {
               title: 'スキャン',
               headerShown: false,
               tabBarLabel: 'スキャン',
+            }}
+          />
+          <Tab.Screen
+            name="Engine"
+            component={ScanEngineScreen}
+            options={{
+              title: 'Engine',
+              headerShown: false,
+              tabBarLabel: 'Engine',
             }}
           />
           <Tab.Screen

@@ -57,6 +57,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private let context: MetalContext
     private let source: DepthFrameSource
 
+    /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
+    var metalContext: MetalContext { context }
+
     // Phase 4 で追加予定（型は確定済み・ここに差し込むだけで配線完了）:
     // private var tsdf: TSDFVolume?
 
