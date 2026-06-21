@@ -24,23 +24,25 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var onFrame: ((DepthFrame) -> Void)?
 
     /// 状態はキャプチャキューとメインスレッドの双方から更新され得るため、ロックで保護する
-    /// （Thread Sanitizer 対策）。通知はキャプチャした値で行い、自己参照の読み取り競合も避ける。
+    /// （Thread Sanitizer 対策）。読み取りは公開、更新は `setState` 経由（private）に限定する。
     private let stateLock = NSLock()
     private var _state: ScanEngineState = .idle
-    private(set) var state: ScanEngineState {
-        get {
-            stateLock.lock(); defer { stateLock.unlock() }
-            return _state
-        }
-        set {
-            stateLock.lock()
-            let changed = newValue != _state
-            _state = newValue
-            stateLock.unlock()
-            guard changed else { return }
-            DispatchQueue.main.async { [weak self] in
-                self?.onState?(newValue)
-            }
+
+    /// 現在の状態（読み取り専用・スレッド安全）。
+    var state: ScanEngineState {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return _state
+    }
+
+    /// 状態を更新し、変化時のみメインスレッドで通知する。
+    private func setState(_ newValue: ScanEngineState) {
+        stateLock.lock()
+        let changed = newValue != _state
+        _state = newValue
+        stateLock.unlock()
+        guard changed else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.onState?(newValue)
         }
     }
 
@@ -80,13 +82,13 @@ final class ScanEngine: DepthFrameSourceDelegate {
     // MARK: - 制御 API（Bridge から呼ばれる最小操作）
 
     func start() {
-        state = .starting
+        setState(.starting)
         source.start()
     }
 
     func stop() {
         source.stop()
-        state = .stopped
+        setState(.stopped)
     }
 
     /// 累積データの破棄（Phase 4 で TSDF ボリューム再初期化を追加）。
@@ -116,11 +118,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     func depthFrameSource(_ source: DepthFrameSource, didChangeTracking trackingState: ScanTrackingState) {
         if case .stopped = state { return }
-        state = .running(tracking: trackingState)
+        setState(.running(tracking: trackingState))
     }
 
     func depthFrameSource(_ source: DepthFrameSource, didFail error: Error) {
-        state = .failed(error.localizedDescription)
+        setState(.failed(error.localizedDescription))
     }
 
     // MARK: - private
