@@ -33,6 +33,11 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   private let followDistance: Float = 1.2            // meters ahead of camera before scanning
   private let boxEdgeRadius: CGFloat = 0.006         // 6 mm — clearly visible wireframe
 
+  // MARK: - LiDAR color (real camera color projected onto mesh, display only)
+  private var colorVoxels: [SIMD3<Int32>: SIMD3<Float>] = [:]  // persisted per-location color
+  private let colorVoxelSize: Float = 0.02                     // 2 cm color cells
+  private let colorLock = NSLock()                             // colorVoxels touched on render+main
+
   // MARK: - React Props
 
   @objc var showMeshOverlay: Bool = true
@@ -83,15 +88,23 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
           self?.fusedFrameCount    = 0
           self?.lastVisualizeCount = 0
         }
+        colorLock.lock(); colorVoxels = [:]; colorLock.unlock()
         DispatchQueue.main.async { [weak self] in
           self?.pointCloudNode?.removeFromParentNode()
           self?.pointCloudNode = nil
           self?.realtimeMeshNode?.removeFromParentNode()
           self?.realtimeMeshNode = nil
+          // Black out the camera feed so only the building mesh is visible (LiDAR).
+          if self?.scannerMode == "lidar" {
+            self?.sceneView.scene.background.contents = UIColor.black
+          }
         }
         if !isSessionRunning { startPreviewSession() }
         ScanEventEmitter.emitEvent(["type": "scanStarted"])
       } else {
+        DispatchQueue.main.async { [weak self] in
+          self?.sceneView.scene.background.contents = nil  // restore live camera feed
+        }
         ScanEventEmitter.emitEvent(["type": "scanStopped"])
       }
     }
@@ -338,6 +351,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       self?.pointCloudNode = nil
       self?.realtimeMeshNode?.removeFromParentNode()
       self?.realtimeMeshNode = nil
+      self?.sceneView.scene.background.contents = nil  // ensure camera feed restored
     }
     isSessionRunning = false
   }
@@ -391,12 +405,19 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
     guard showMeshOverlay, scannerMode == "lidar",
           let mesh = anchor as? ARMeshAnchor else { return SCNNode() }
-    return SCNNode(geometry: lidarGeometry(mesh.geometry))
+    return SCNNode(geometry: lidarMeshGeometry(mesh.geometry, transform: anchor.transform))
   }
 
   func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
     guard scannerMode == "lidar", let mesh = anchor as? ARMeshAnchor else { return }
-    node.geometry = showMeshOverlay ? lidarGeometry(mesh.geometry) : nil
+    node.geometry = showMeshOverlay
+      ? lidarMeshGeometry(mesh.geometry, transform: anchor.transform) : nil
+  }
+
+  /// While scanning, show a solid mesh tinted with real camera color; otherwise the
+  /// light wireframe preview over the camera feed.
+  private func lidarMeshGeometry(_ mesh: ARMeshGeometry, transform: simd_float4x4) -> SCNGeometry {
+    isScanning ? coloredLidarGeometry(mesh, transform: transform) : lidarGeometry(mesh)
   }
 
   // MARK: - Depth Integration (runs on fusionQueue)
@@ -1066,6 +1087,116 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     mat.diffuse.contents = UIColor.systemBlue.withAlphaComponent(0.3)
     mat.isDoubleSided = true
     mat.fillMode      = .lines
+    geo.materials = [mat]
+    return geo
+  }
+
+  // MARK: - Colored LiDAR Geometry (real camera color, display only)
+
+  private func colorKey(_ p: SIMD3<Float>) -> SIMD3<Int32> {
+    SIMD3<Int32>(Int32(floor(p.x / colorVoxelSize)),
+                 Int32(floor(p.y / colorVoxelSize)),
+                 Int32(floor(p.z / colorVoxelSize)))
+  }
+
+  /// Solid mesh whose vertices are tinted with the live camera color. Vertices visible
+  /// in the current frame are sampled fresh and cached per-location; vertices not
+  /// currently visible reuse their last cached color (gray if never seen).
+  private func coloredLidarGeometry(_ mesh: ARMeshGeometry,
+                                    transform: simd_float4x4) -> SCNGeometry {
+    let vSrc    = mesh.vertices
+    let vCount  = vSrc.count
+    let vBase   = vSrc.buffer.contents()
+    let vStride = vSrc.stride
+    let vOffset = vSrc.offset
+
+    var localVerts = [SCNVector3](); localVerts.reserveCapacity(vCount)
+    var worldVerts = [SIMD3<Float>](); worldVerts.reserveCapacity(vCount)
+    for i in 0..<vCount {
+      let p = vBase.advanced(by: vOffset + i * vStride).assumingMemoryBound(to: Float.self)
+      localVerts.append(SCNVector3(p[0], p[1], p[2]))
+      let w = transform * SIMD4<Float>(p[0], p[1], p[2], 1)
+      worldVerts.append(SIMD3<Float>(w.x, w.y, w.z))
+    }
+
+    // Seed colors from the persisted cache (gray fallback).
+    let gray = SIMD4<Float>(0.55, 0.55, 0.55, 1)
+    var colors = [SIMD4<Float>](repeating: gray, count: vCount)
+    colorLock.lock()
+    defer { colorLock.unlock() }
+    for i in 0..<vCount {
+      if let c = colorVoxels[colorKey(worldVerts[i])] {
+        colors[i] = SIMD4<Float>(c.x, c.y, c.z, 1)
+      }
+    }
+
+    // Sample real color for vertices visible in the current frame.
+    if let frame = sceneView.session.currentFrame {
+      let pb = frame.capturedImage
+      CVPixelBufferLockBaseAddress(pb, .readOnly)
+      defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+
+      let K  = frame.camera.intrinsics
+      let fx = K.columns.0.x, fy = K.columns.1.y
+      let cx = K.columns.2.x, cy = K.columns.2.y
+      let imgW = CVPixelBufferGetWidthOfPlane(pb, 0)
+      let imgH = CVPixelBufferGetHeightOfPlane(pb, 0)
+      let yBase = CVPixelBufferGetBaseAddressOfPlane(pb, 0)!.assumingMemoryBound(to: UInt8.self)
+      let yBpr  = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+      let cBase = CVPixelBufferGetBaseAddressOfPlane(pb, 1)!.assumingMemoryBound(to: UInt8.self)
+      let cBpr  = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+      let invCam = simd_inverse(frame.camera.transform)
+
+      for i in 0..<vCount {
+        let c4 = invCam * SIMD4<Float>(worldVerts[i], 1)
+        // ARKit camera: +X right, +Y up, -Z forward → convert to CV (Y,Z flipped).
+        let xcv = c4.x, ycv = -c4.y, zcv = -c4.z
+        guard zcv > 0.05 else { continue }
+        let u = Int((fx * xcv / zcv + cx).rounded())
+        let v = Int((fy * ycv / zcv + cy).rounded())
+        guard u >= 0, u < imgW, v >= 0, v < imgH else { continue }
+
+        let yy = Float(yBase[v * yBpr + u])
+        let cu = (u >> 1) << 1
+        let cvp = v >> 1
+        let cb = Float(cBase[cvp * cBpr + cu])
+        let cr = Float(cBase[cvp * cBpr + cu + 1])
+        var r = yy + 1.402 * (cr - 128)
+        var g = yy - 0.344136 * (cb - 128) - 0.714136 * (cr - 128)
+        var b = yy + 1.772 * (cb - 128)
+        r = min(255, max(0, r)); g = min(255, max(0, g)); b = min(255, max(0, b))
+        let col = SIMD3<Float>(r / 255, g / 255, b / 255)
+        colors[i] = SIMD4<Float>(col, 1)
+        colorVoxels[colorKey(worldVerts[i])] = col
+      }
+    }
+
+    let vsrc = SCNGeometrySource(vertices: localVerts)
+    let colorData = Data(bytes: colors, count: colors.count * MemoryLayout<SIMD4<Float>>.stride)
+    let csrc = SCNGeometrySource(data: colorData, semantic: .color,
+                                 vectorCount: vCount, usesFloatComponents: true,
+                                 componentsPerVector: 4, bytesPerComponent: 4,
+                                 dataOffset: 0, dataStride: MemoryLayout<SIMD4<Float>>.stride)
+
+    let fCount = mesh.faces.count
+    let iBuf   = mesh.faces.buffer.contents()
+    let bpi    = mesh.faces.bytesPerIndex
+    var idx: [UInt32] = []; idx.reserveCapacity(fCount * 3)
+    for i in 0..<(fCount * 3) {
+      let o = i * bpi
+      idx.append(bpi == 4
+        ? iBuf.load(fromByteOffset: o, as: UInt32.self)
+        : UInt32(iBuf.load(fromByteOffset: o, as: UInt16.self)))
+    }
+    let idxData = Data(bytes: idx, count: idx.count * 4)
+    let elem    = SCNGeometryElement(data: idxData, primitiveType: .triangles,
+                                     primitiveCount: fCount, bytesPerIndex: 4)
+
+    let geo = SCNGeometry(sources: [vsrc, csrc], elements: [elem])
+    let mat = SCNMaterial()
+    mat.diffuse.contents = UIColor.white   // modulated by per-vertex .color semantic
+    mat.lightingModel    = .constant
+    mat.isDoubleSided    = true
     geo.materials = [mat]
     return geo
   }
