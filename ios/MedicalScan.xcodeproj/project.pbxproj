@@ -22,6 +22,12 @@
 		AA000011B368108700A75B9A /* STLViewerNativeView.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000012B368108700A75B9A /* STLViewerNativeView.m */; };
 		AA000013B368108700A75B9A /* ScanEventEmitter.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000014B368108700A75B9A /* ScanEventEmitter.m */; };
 		AA000015B368108700A75B9A /* LiDARScannerBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = AA000016B368108700A75B9A /* LiDARScannerBridge.m */; };
+		AB000001B368108700A75B9A /* MetalContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002B368108700A75B9A /* MetalContext.swift */; };
+		AB000003B368108700A75B9A /* ScanEngineTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000004B368108700A75B9A /* ScanEngineTypes.swift */; };
+		AB000005B368108700A75B9A /* ScanEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000006B368108700A75B9A /* ScanEngine.swift */; };
+		AB000007B368108700A75B9A /* DepthFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000008B368108700A75B9A /* DepthFrameSource.swift */; };
+		AB000009B368108700A75B9A /* TrueDepthSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000AB368108700A75B9A /* TrueDepthSource.swift */; };
+		AB00000BB368108700A75B9A /* DepthFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000CB368108700A75B9A /* DepthFilter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +57,12 @@
 		AA000019B368108700A75B9A /* ScanEventEmitter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ScanEventEmitter.h; path = MedicalScan/ScanEventEmitter.h; sourceTree = "<group>"; };
 		AA00001AB368108700A75B9A /* ExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExceptionCatcher.h; path = MedicalScan/ExceptionCatcher.h; sourceTree = "<group>"; };
 		AA00001BB368108700A75B9A /* MedicalScan-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "MedicalScan-Bridging-Header.h"; path = "MedicalScan/MedicalScan-Bridging-Header.h"; sourceTree = "<group>"; };
+		AB000002B368108700A75B9A /* MetalContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalContext.swift; path = MedicalScan/ScanEngine/Core/MetalContext.swift; sourceTree = "<group>"; };
+		AB000004B368108700A75B9A /* ScanEngineTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScanEngineTypes.swift; path = MedicalScan/ScanEngine/Core/ScanEngineTypes.swift; sourceTree = "<group>"; };
+		AB000006B368108700A75B9A /* ScanEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScanEngine.swift; path = MedicalScan/ScanEngine/Core/ScanEngine.swift; sourceTree = "<group>"; };
+		AB000008B368108700A75B9A /* DepthFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DepthFrameSource.swift; path = MedicalScan/ScanEngine/Capture/DepthFrameSource.swift; sourceTree = "<group>"; };
+		AB00000AB368108700A75B9A /* TrueDepthSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TrueDepthSource.swift; path = MedicalScan/ScanEngine/Capture/TrueDepthSource.swift; sourceTree = "<group>"; };
+		AB00000CB368108700A75B9A /* DepthFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DepthFilter.swift; path = MedicalScan/ScanEngine/Filtering/DepthFilter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +98,12 @@
 				AA000016B368108700A75B9A /* LiDARScannerBridge.m */,
 				AA00001AB368108700A75B9A /* ExceptionCatcher.h */,
 				AA00001BB368108700A75B9A /* MedicalScan-Bridging-Header.h */,
+				AB000002B368108700A75B9A /* MetalContext.swift */,
+				AB000004B368108700A75B9A /* ScanEngineTypes.swift */,
+				AB000006B368108700A75B9A /* ScanEngine.swift */,
+				AB000008B368108700A75B9A /* DepthFrameSource.swift */,
+				AB00000AB368108700A75B9A /* TrueDepthSource.swift */,
+				AB00000CB368108700A75B9A /* DepthFilter.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -299,6 +317,12 @@
 				AA000011B368108700A75B9A /* STLViewerNativeView.m in Sources */,
 				AA000013B368108700A75B9A /* ScanEventEmitter.m in Sources */,
 				AA000015B368108700A75B9A /* LiDARScannerBridge.m in Sources */,
+				AB000001B368108700A75B9A /* MetalContext.swift in Sources */,
+				AB000003B368108700A75B9A /* ScanEngineTypes.swift in Sources */,
+				AB000005B368108700A75B9A /* ScanEngine.swift in Sources */,
+				AB000007B368108700A75B9A /* DepthFrameSource.swift in Sources */,
+				AB000009B368108700A75B9A /* TrueDepthSource.swift in Sources */,
+				AB00000BB368108700A75B9A /* DepthFilter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,7 +335,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 46;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -342,7 +366,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 46;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
