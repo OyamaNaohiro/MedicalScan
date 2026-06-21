@@ -7,6 +7,7 @@
 @interface LiDARScannerNativeView : UIView
 
 @property (nonatomic) BOOL showMeshOverlay;
+@property (nonatomic) BOOL boundingBoxEnabled;
 @property (nonatomic, copy) NSString *scannerMode;
 @property (nonatomic) BOOL isScanning;
 @property (nonatomic, copy) NSString *exportFilename;

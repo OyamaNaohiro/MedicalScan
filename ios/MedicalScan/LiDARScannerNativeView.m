@@ -33,6 +33,11 @@
   [_impl setValue:@(showMeshOverlay) forKey:@"showMeshOverlay"];
 }
 
+- (void)setBoundingBoxEnabled:(BOOL)boundingBoxEnabled {
+  _boundingBoxEnabled = boundingBoxEnabled;
+  [_impl setValue:@(boundingBoxEnabled) forKey:@"boundingBoxEnabled"];
+}
+
 - (void)setScannerMode:(NSString *)scannerMode {
   _scannerMode = [scannerMode copy];
   [_impl setValue:(scannerMode ?: @"lidar") forKey:@"scannerMode"];

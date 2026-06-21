@@ -19,6 +19,7 @@ export default function ScanScreen() {
   const [phase, setPhase] = useState<ScanPhase>('select');
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [showMesh, setShowMesh] = useState(true);
+  const [boxEnabled, setBoxEnabled] = useState(false);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('lidar');
   const [exportFilename, setExportFilename] = useState('');
   const [shareFilePath, setShareFilePath] = useState('');
@@ -158,6 +159,7 @@ export default function ScanScreen() {
       <LiDARScannerView
         style={styles.scanner}
         showMeshOverlay={showMesh}
+        boundingBoxEnabled={scannerMode === 'lidar' && boxEnabled}
         scannerMode={scannerMode}
         isScanning={scanState === 'scanning'}
         exportFilename={exportFilename}
@@ -186,12 +188,29 @@ export default function ScanScreen() {
         )}
       </View>
 
+      {scannerMode === 'lidar' && boxEnabled && (
+        <View style={styles.boxHint}>
+          <Text style={styles.boxHintText}>
+            2本指のピンチで拡大縮小・1本指ドラッグで移動
+          </Text>
+        </View>
+      )}
+
       <View style={styles.controls}>
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => setShowMesh(prev => !prev)}>
-          <Text style={styles.toggleText}>メッシュ {showMesh ? 'OFF' : 'ON'}</Text>
-        </TouchableOpacity>
+        <View style={styles.toggleColumn}>
+          <TouchableOpacity
+            style={styles.toggleButton}
+            onPress={() => setShowMesh(prev => !prev)}>
+            <Text style={styles.toggleText}>メッシュ {showMesh ? 'OFF' : 'ON'}</Text>
+          </TouchableOpacity>
+          {scannerMode === 'lidar' && (
+            <TouchableOpacity
+              style={[styles.toggleButton, boxEnabled && styles.toggleButtonActive]}
+              onPress={() => setBoxEnabled(prev => !prev)}>
+              <Text style={styles.toggleText}>範囲 {boxEnabled ? 'ON' : 'OFF'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {scanState === 'idle' ? (
           <TouchableOpacity style={styles.scanButton} onPress={handleStartScan}>
@@ -380,11 +399,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.8)',
   },
+  toggleColumn: {
+    gap: 8,
+  },
   toggleButton: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 10,
     backgroundColor: '#333',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#007aff',
+  },
+  boxHint: {
+    position: 'absolute',
+    bottom: 130,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  boxHintText: {
+    color: '#ffd60a',
+    fontSize: 12,
+    fontWeight: '600',
   },
   toggleText: {
     color: '#fff',

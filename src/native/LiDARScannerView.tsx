@@ -6,6 +6,7 @@ export type ScannerMode = 'lidar' | 'trueDepthObject' | 'structureSensor';
 interface LiDARScannerViewProps {
   style?: ViewStyle;
   showMeshOverlay?: boolean;
+  boundingBoxEnabled?: boolean;
   scannerMode?: ScannerMode;
   isScanning?: boolean;
   exportFilename?: string;
@@ -20,6 +21,7 @@ const NativeLiDARView =
 const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
   style,
   showMeshOverlay = true,
+  boundingBoxEnabled = false,
   scannerMode = 'lidar',
   isScanning = false,
   exportFilename = '',
@@ -32,6 +34,7 @@ const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
     <NativeLiDARView
       style={style}
       showMeshOverlay={showMeshOverlay}
+      boundingBoxEnabled={boundingBoxEnabled}
       scannerMode={scannerMode}
       isScanning={isScanning}
       exportFilename={exportFilename}

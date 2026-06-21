@@ -25,15 +25,42 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - Structure Sensor
   private var structureCaptureSession: AnyObject? = nil  // STCaptureSession when SDK available
 
+  // MARK: - Bounding Box (LiDAR scan region crop)
+  private var boxCenter = SIMD3<Float>(0, 0, -1.5)   // world space, meters
+  private var boxSize   = SIMD3<Float>(0.6, 1.2, 0.6) // W,H,D — body-ish default
+  private var boxNode: SCNNode?
+  private var boxInitialized = false
+  private var pinchStartSize: SIMD3<Float>?
+  private var panStartCenter: SIMD3<Float>?
+  private let boxMinSize: Float = 0.1
+  private let boxMaxSize: Float = 3.0
+
   // MARK: - React Props
 
   @objc var showMeshOverlay: Bool = true
+
+  @objc var boundingBoxEnabled: Bool = false {
+    didSet {
+      guard boundingBoxEnabled != oldValue else { return }
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        if self.boundingBoxEnabled {
+          if !self.boxInitialized { self.placeBoxInFrontOfCamera() }
+          self.updateBoxNode()
+        } else {
+          self.boxNode?.removeFromParentNode()
+          self.boxNode = nil
+        }
+      }
+    }
+  }
 
   @objc var scannerMode: String = "lidar" {
     didSet {
       guard scannerMode != oldValue else { return }
       if isSessionRunning { pauseARSession() }
       if window != nil { startPreviewSession() }
+      DispatchQueue.main.async { [weak self] in self?.updateBoxNode() }
     }
   }
 
@@ -67,6 +94,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       let filename    = exportFilename
       let mode        = scannerMode
       let meshAnchors = collectedMeshAnchors
+      let cropEnabled = boundingBoxEnabled
+      let cropCenter  = boxCenter
+      let cropSize    = boxSize
 
       if mode == "trueDepthObject" || mode == "structureSensor" {
         fusionQueue.async { [weak self] in
@@ -95,7 +125,9 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
                 "message": "メッシュデータがありません。スキャンを実行してください。"])
               return
             }
-            let path = try self.convertMeshToSTL(anchors: meshAnchors, filename: filename)
+            let path = try self.convertMeshToSTL(anchors: meshAnchors, filename: filename,
+                                                 cropEnabled: cropEnabled,
+                                                 cropCenter: cropCenter, cropSize: cropSize)
             ScanEventEmitter.emitEvent(["type": "exported", "path": path])
           } catch {
             ScanEventEmitter.emitEvent(["type": "error", "message": error.localizedDescription])
@@ -143,6 +175,89 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     sceneView.session.delegate = self
     sceneView.automaticallyUpdatesLighting = true
     addSubview(sceneView)
+
+    // Bounding-box manipulation gestures (active only when boundingBoxEnabled)
+    let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handleBoxPinch(_:)))
+    let pan   = UIPanGestureRecognizer(target: self, action: #selector(handleBoxPan(_:)))
+    pan.maximumNumberOfTouches = 1
+    sceneView.addGestureRecognizer(pinch)
+    sceneView.addGestureRecognizer(pan)
+  }
+
+  // MARK: - Bounding Box manipulation
+
+  private func placeBoxInFrontOfCamera() {
+    boxInitialized = true
+    guard let cam = sceneView.session.currentFrame?.camera.transform else {
+      boxCenter = SIMD3<Float>(0, 0, -1.5)
+      return
+    }
+    let camPos  = SIMD3<Float>(cam.columns.3.x, cam.columns.3.y, cam.columns.3.z)
+    let forward = -SIMD3<Float>(cam.columns.2.x, cam.columns.2.y, cam.columns.2.z)
+    boxCenter = camPos + forward * 1.5  // 1.5 m ahead of the camera
+  }
+
+  private func updateBoxNode() {
+    guard boundingBoxEnabled, scannerMode == "lidar" else {
+      boxNode?.removeFromParentNode(); boxNode = nil; return
+    }
+    let box = SCNBox(width: CGFloat(boxSize.x), height: CGFloat(boxSize.y),
+                     length: CGFloat(boxSize.z), chamferRadius: 0)
+    let mat = SCNMaterial()
+    mat.fillMode      = .lines
+    mat.diffuse.contents = UIColor.systemYellow
+    mat.isDoubleSided = true
+    mat.lightingModel = .constant
+    box.materials = [mat]
+    if boxNode == nil {
+      let node = SCNNode()
+      sceneView.scene.rootNode.addChildNode(node)
+      boxNode = node
+    }
+    boxNode?.geometry     = box
+    boxNode?.simdPosition = boxCenter
+  }
+
+  @objc private func handleBoxPinch(_ g: UIPinchGestureRecognizer) {
+    guard boundingBoxEnabled, scannerMode == "lidar" else { return }
+    switch g.state {
+    case .began:
+      pinchStartSize = boxSize
+    case .changed:
+      guard let start = pinchStartSize else { return }
+      let s = Float(g.scale)
+      boxSize = simd_clamp(start * s,
+                           SIMD3<Float>(repeating: boxMinSize),
+                           SIMD3<Float>(repeating: boxMaxSize))
+      updateBoxNode()
+    default:
+      pinchStartSize = nil
+    }
+  }
+
+  @objc private func handleBoxPan(_ g: UIPanGestureRecognizer) {
+    guard boundingBoxEnabled, scannerMode == "lidar" else { return }
+    switch g.state {
+    case .began:
+      panStartCenter = boxCenter
+    case .changed:
+      guard let start = panStartCenter,
+            let cam = sceneView.session.currentFrame?.camera.transform else { return }
+      let t     = g.translation(in: sceneView)
+      let right = SIMD3<Float>(cam.columns.0.x, cam.columns.0.y, cam.columns.0.z)
+      let up    = SIMD3<Float>(cam.columns.1.x, cam.columns.1.y, cam.columns.1.z)
+      let k: Float = 0.0015   // ~1.5 mm of world movement per screen point
+      boxCenter = start + right * Float(t.x) * k - up * Float(t.y) * k
+      updateBoxNode()
+    default:
+      panStartCenter = nil
+    }
+  }
+
+  /// True if a world-space point lies inside the axis-aligned scan box.
+  private func boxContains(_ p: SIMD3<Float>, center: SIMD3<Float>, size: SIMD3<Float>) -> Bool {
+    let d = p - center
+    return abs(d.x) <= size.x * 0.5 && abs(d.y) <= size.y * 0.5 && abs(d.z) <= size.z * 0.5
   }
 
   override func layoutSubviews() {
@@ -1206,9 +1321,13 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
 
   // MARK: - LiDAR STL Export
 
-  private func convertMeshToSTL(anchors: [ARMeshAnchor], filename: String) throws -> String {
+  private func convertMeshToSTL(anchors: [ARMeshAnchor], filename: String,
+                                cropEnabled: Bool = false,
+                                cropCenter: SIMD3<Float> = .zero,
+                                cropSize: SIMD3<Float> = .zero) throws -> String {
     let allocator = MDLMeshBufferDataAllocator()
     let asset     = MDLAsset()
+    var keptTriangles = 0
     for anchor in anchors {
       let g         = anchor.geometry
       let transform = anchor.transform
@@ -1228,15 +1347,35 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
       let iBuf   = g.faces.buffer.contents()
       let bpi    = g.faces.bytesPerIndex
       var idx: [UInt32] = []
-      for i in 0..<(fCount * 3) {
-        let o = i * bpi
-        idx.append(bpi == 4
-          ? iBuf.load(fromByteOffset: o, as: UInt32.self)
-          : UInt32(iBuf.load(fromByteOffset: o, as: UInt16.self)))
+      idx.reserveCapacity(fCount * 3)
+      for f in 0..<fCount {
+        let i0 = idx_at(iBuf, (f*3) * bpi, bpi)
+        let i1 = idx_at(iBuf, (f*3 + 1) * bpi, bpi)
+        let i2 = idx_at(iBuf, (f*3 + 2) * bpi, bpi)
+        // When the scan box is enabled, keep only triangles whose centroid is inside it.
+        if cropEnabled {
+          let centroid = (verts[Int(i0)] + verts[Int(i1)] + verts[Int(i2)]) / 3
+          guard boxContains(centroid, center: cropCenter, size: cropSize) else { continue }
+        }
+        idx.append(i0); idx.append(i1); idx.append(i2)
       }
+      guard !idx.isEmpty else { continue }
+      keptTriangles += idx.count / 3
       if let mesh = buildMDLMesh(verts, idx, vCount, allocator) { asset.add(mesh) }
     }
+    guard keptTriangles > 0 else {
+      throw NSError(domain: "Scan", code: 4, userInfo: [
+        NSLocalizedDescriptionKey: cropEnabled
+          ? "範囲ボックス内にメッシュがありません。ボックスの位置・サイズを調整してください。"
+          : "メッシュデータがありません。スキャンを実行してください。"])
+    }
     return try exportAsset(asset, filename: filename)
+  }
+
+  private func idx_at(_ buf: UnsafeRawPointer, _ offset: Int, _ bpi: Int) -> UInt32 {
+    bpi == 4
+      ? buf.load(fromByteOffset: offset, as: UInt32.self)
+      : UInt32(buf.load(fromByteOffset: offset, as: UInt16.self))
   }
 
   private func buildMDLMesh(_ verts: [SIMD3<Float>], _ idx: [UInt32],
