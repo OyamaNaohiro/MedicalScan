@@ -510,7 +510,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     let pts = Array(worldVoxels.values.prefix(40000)).map { $0.center }
     DispatchQueue.main.async { [weak self] in self?.updatePointCloud(pts) }
 
-    guard fusedFrameCount - lastMeshCount >= 60 else { return }
+    guard fusedFrameCount - lastMeshCount >= 45 else { return }
     lastMeshCount = fusedFrameCount
     let snapVoxels = worldVoxels
     DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -651,8 +651,8 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   private func buildRealtimeMesh(
     _ voxels: [SIMD3<Int32>: (center: SIMD3<Float>, count: Int32)]
   ) -> SCNGeometry? {
-    let occupied = Set(voxels.filter { $0.value.count >= 6 }.keys)
-    guard occupied.count > 10 else { return nil }
+    let occupied = Set(voxels.filter { $0.value.count >= 4 }.keys)
+    guard occupied.count > 6 else { return nil }
 
     let mcCorners: [SIMD3<Int32>] = [
       SIMD3(0,0,0), SIMD3(1,0,0), SIMD3(1,1,0), SIMD3(0,1,0),
@@ -765,7 +765,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     filename: String) throws -> String {
 
     // ── 1. Filter: keep only voxels seen in ≥8 frames ─────────────────────
-    let filtered = voxels.filter { $0.value.count >= 6 }
+    let filtered = voxels.filter { $0.value.count >= 4 }
     guard !filtered.isEmpty else {
       throw NSError(domain: "Scan", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "スキャンデータがありません。スキャンを実行してください。"])
@@ -962,7 +962,7 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     // Remove triangles whose vertices fall in low-density voxel regions
     // (edge bleeding artifacts, ghost surfaces from tracking drift)
     let densityR: Int32 = 2   // search 5x5x5 neighborhood
-    let densityMin: Float = 50 // min total count-sum in neighborhood
+    let densityMin: Float = 35 // min total count-sum in neighborhood
     func voxelDensity(_ p: SIMD3<Float>) -> Float {
       let k = SIMD3<Int32>(
         Int32(floor(p.x / voxelSize)),
