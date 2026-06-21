@@ -15,11 +15,48 @@ import {addScanEventListener} from '../native/ScanEventEmitter';
 type ScanPhase = 'select' | 'active';
 type ScanState = 'idle' | 'scanning' | 'exporting';
 
+const DIM_MIN = 0.1;
+const DIM_MAX = 3.0;
+const DIM_STEP = 0.05;
+const clampDim = (v: number) =>
+  Math.round(Math.min(DIM_MAX, Math.max(DIM_MIN, v)) * 100) / 100;
+
+interface BoxDimRowProps {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}
+
+function BoxDimRow({label, value, onChange, disabled}: BoxDimRowProps) {
+  return (
+    <View style={styles.dimRow}>
+      <Text style={styles.dimLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.dimButton, disabled && styles.disabledButton]}
+        onPress={() => onChange(value - DIM_STEP)}
+        disabled={disabled}>
+        <Text style={styles.dimButtonText}>−</Text>
+      </TouchableOpacity>
+      <Text style={styles.dimValue}>{`${Math.round(value * 100)} cm`}</Text>
+      <TouchableOpacity
+        style={[styles.dimButton, disabled && styles.disabledButton]}
+        onPress={() => onChange(value + DIM_STEP)}
+        disabled={disabled}>
+        <Text style={styles.dimButtonText}>＋</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function ScanScreen() {
   const [phase, setPhase] = useState<ScanPhase>('select');
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [showMesh, setShowMesh] = useState(true);
   const [boxEnabled, setBoxEnabled] = useState(false);
+  const [boxW, setBoxW] = useState(0.6);
+  const [boxH, setBoxH] = useState(1.2);
+  const [boxD, setBoxD] = useState(0.6);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('lidar');
   const [exportFilename, setExportFilename] = useState('');
   const [shareFilePath, setShareFilePath] = useState('');
@@ -160,6 +197,9 @@ export default function ScanScreen() {
         style={styles.scanner}
         showMeshOverlay={showMesh}
         boundingBoxEnabled={scannerMode === 'lidar' && boxEnabled}
+        boxWidth={boxW}
+        boxHeight={boxH}
+        boxDepth={boxD}
         scannerMode={scannerMode}
         isScanning={scanState === 'scanning'}
         exportFilename={exportFilename}
@@ -189,10 +229,28 @@ export default function ScanScreen() {
       </View>
 
       {scannerMode === 'lidar' && boxEnabled && (
-        <View style={styles.boxHint}>
+        <View style={styles.boxPanel}>
           <Text style={styles.boxHintText}>
-            2本指のピンチで拡大縮小・1本指ドラッグで移動
+            スマホを向けて範囲を合わせ、開始すると固定されます
           </Text>
+          <BoxDimRow
+            label="幅"
+            value={boxW}
+            onChange={v => setBoxW(clampDim(v))}
+            disabled={scanState !== 'idle'}
+          />
+          <BoxDimRow
+            label="高さ"
+            value={boxH}
+            onChange={v => setBoxH(clampDim(v))}
+            disabled={scanState !== 'idle'}
+          />
+          <BoxDimRow
+            label="奥行"
+            value={boxD}
+            onChange={v => setBoxD(clampDim(v))}
+            disabled={scanState !== 'idle'}
+          />
         </View>
       )}
 
@@ -411,19 +469,55 @@ const styles = StyleSheet.create({
   toggleButtonActive: {
     backgroundColor: '#007aff',
   },
-  boxHint: {
+  boxPanel: {
     position: 'absolute',
-    bottom: 130,
+    bottom: 110,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    width: '90%',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 16,
+    gap: 8,
   },
   boxHintText: {
     color: '#ffd60a',
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  dimRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dimLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    width: 48,
+  },
+  dimButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#007aff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dimButtonText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  dimValue: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    width: 70,
+    textAlign: 'center',
   },
   toggleText: {
     color: '#fff',

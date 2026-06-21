@@ -38,6 +38,21 @@
   [_impl setValue:@(boundingBoxEnabled) forKey:@"boundingBoxEnabled"];
 }
 
+- (void)setBoxWidth:(CGFloat)boxWidth {
+  _boxWidth = boxWidth;
+  [_impl setValue:@(boxWidth) forKey:@"boxWidth"];
+}
+
+- (void)setBoxHeight:(CGFloat)boxHeight {
+  _boxHeight = boxHeight;
+  [_impl setValue:@(boxHeight) forKey:@"boxHeight"];
+}
+
+- (void)setBoxDepth:(CGFloat)boxDepth {
+  _boxDepth = boxDepth;
+  [_impl setValue:@(boxDepth) forKey:@"boxDepth"];
+}
+
 - (void)setScannerMode:(NSString *)scannerMode {
   _scannerMode = [scannerMode copy];
   [_impl setValue:(scannerMode ?: @"lidar") forKey:@"scannerMode"];

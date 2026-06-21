@@ -8,6 +8,9 @@
 
 @property (nonatomic) BOOL showMeshOverlay;
 @property (nonatomic) BOOL boundingBoxEnabled;
+@property (nonatomic) CGFloat boxWidth;
+@property (nonatomic) CGFloat boxHeight;
+@property (nonatomic) CGFloat boxDepth;
 @property (nonatomic, copy) NSString *scannerMode;
 @property (nonatomic) BOOL isScanning;
 @property (nonatomic, copy) NSString *exportFilename;

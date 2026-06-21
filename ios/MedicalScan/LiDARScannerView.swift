@@ -26,14 +26,12 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   private var structureCaptureSession: AnyObject? = nil  // STCaptureSession when SDK available
 
   // MARK: - Bounding Box (LiDAR scan region crop)
-  private var boxCenter = SIMD3<Float>(0, 0, -1.5)   // world space, meters
+  private var boxCenter = SIMD3<Float>(0, 0, -1.2)   // world space, meters
   private var boxSize   = SIMD3<Float>(0.6, 1.2, 0.6) // W,H,D — body-ish default
   private var boxNode: SCNNode?
   private var boxInitialized = false
-  private var pinchStartSize: SIMD3<Float>?
-  private var panStartCenter: SIMD3<Float>?
-  private let boxMinSize: Float = 0.1
-  private let boxMaxSize: Float = 3.0
+  private let followDistance: Float = 1.2            // meters ahead of camera before scanning
+  private let boxEdgeRadius: CGFloat = 0.006         // 6 mm — clearly visible wireframe
 
   // MARK: - React Props
 
@@ -53,6 +51,17 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
         }
       }
     }
+  }
+
+  // Per-axis box dimensions (meters), driven by React steppers.
+  @objc var boxWidth: CGFloat = 0.6 {
+    didSet { boxSize.x = Float(boxWidth); refreshBoxGeometryMain() }
+  }
+  @objc var boxHeight: CGFloat = 1.2 {
+    didSet { boxSize.y = Float(boxHeight); refreshBoxGeometryMain() }
+  }
+  @objc var boxDepth: CGFloat = 0.6 {
+    didSet { boxSize.z = Float(boxDepth); refreshBoxGeometryMain() }
   }
 
   @objc var scannerMode: String = "lidar" {
@@ -175,83 +184,85 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
     sceneView.session.delegate = self
     sceneView.automaticallyUpdatesLighting = true
     addSubview(sceneView)
-
-    // Bounding-box manipulation gestures (active only when boundingBoxEnabled)
-    let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handleBoxPinch(_:)))
-    let pan   = UIPanGestureRecognizer(target: self, action: #selector(handleBoxPan(_:)))
-    pan.maximumNumberOfTouches = 1
-    sceneView.addGestureRecognizer(pinch)
-    sceneView.addGestureRecognizer(pan)
   }
 
-  // MARK: - Bounding Box manipulation
+  // MARK: - Bounding Box
 
   private func placeBoxInFrontOfCamera() {
     boxInitialized = true
     guard let cam = sceneView.session.currentFrame?.camera.transform else {
-      boxCenter = SIMD3<Float>(0, 0, -1.5)
+      boxCenter = SIMD3<Float>(0, 0, -followDistance)
       return
     }
     let camPos  = SIMD3<Float>(cam.columns.3.x, cam.columns.3.y, cam.columns.3.z)
     let forward = -SIMD3<Float>(cam.columns.2.x, cam.columns.2.y, cam.columns.2.z)
-    boxCenter = camPos + forward * 1.5  // 1.5 m ahead of the camera
+    boxCenter = camPos + forward * followDistance
   }
 
+  private func refreshBoxGeometryMain() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self, self.boxNode != nil else { return }
+      self.rebuildBoxGeometry()
+    }
+  }
+
+  /// Creates the box parent node (if needed), rebuilds the wireframe and positions it.
   private func updateBoxNode() {
     guard boundingBoxEnabled, scannerMode == "lidar" else {
       boxNode?.removeFromParentNode(); boxNode = nil; return
     }
-    let box = SCNBox(width: CGFloat(boxSize.x), height: CGFloat(boxSize.y),
-                     length: CGFloat(boxSize.z), chamferRadius: 0)
-    let mat = SCNMaterial()
-    mat.fillMode      = .lines
-    mat.diffuse.contents = UIColor.systemYellow
-    mat.isDoubleSided = true
-    mat.lightingModel = .constant
-    box.materials = [mat]
     if boxNode == nil {
       let node = SCNNode()
       sceneView.scene.rootNode.addChildNode(node)
       boxNode = node
     }
-    boxNode?.geometry     = box
+    rebuildBoxGeometry()
     boxNode?.simdPosition = boxCenter
   }
 
-  @objc private func handleBoxPinch(_ g: UIPinchGestureRecognizer) {
-    guard boundingBoxEnabled, scannerMode == "lidar" else { return }
-    switch g.state {
-    case .began:
-      pinchStartSize = boxSize
-    case .changed:
-      guard let start = pinchStartSize else { return }
-      let s = Float(g.scale)
-      boxSize = simd_clamp(start * s,
-                           SIMD3<Float>(repeating: boxMinSize),
-                           SIMD3<Float>(repeating: boxMaxSize))
-      updateBoxNode()
-    default:
-      pinchStartSize = nil
+  /// Cheap per-frame reposition (no geometry rebuild) used by camera-follow.
+  private func updateBoxPosition() {
+    boxNode?.simdPosition = boxCenter
+  }
+
+  /// Rebuilds the 12 edges as cylinders so line thickness is controllable.
+  private func rebuildBoxGeometry() {
+    guard let parent = boxNode else { return }
+    parent.childNodes.forEach { $0.removeFromParentNode() }
+    let hx = boxSize.x * 0.5, hy = boxSize.y * 0.5, hz = boxSize.z * 0.5
+    let c: [SIMD3<Float>] = [
+      SIMD3(-hx, -hy, -hz), SIMD3(hx, -hy, -hz), SIMD3(hx, hy, -hz), SIMD3(-hx, hy, -hz),
+      SIMD3(-hx, -hy,  hz), SIMD3(hx, -hy,  hz), SIMD3(hx, hy,  hz), SIMD3(-hx, hy,  hz)
+    ]
+    let edges = [(0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)]
+    for (i, j) in edges {
+      parent.addChildNode(edgeCylinder(c[i], c[j], radius: boxEdgeRadius, color: .systemYellow))
     }
   }
 
-  @objc private func handleBoxPan(_ g: UIPanGestureRecognizer) {
-    guard boundingBoxEnabled, scannerMode == "lidar" else { return }
-    switch g.state {
-    case .began:
-      panStartCenter = boxCenter
-    case .changed:
-      guard let start = panStartCenter,
-            let cam = sceneView.session.currentFrame?.camera.transform else { return }
-      let t     = g.translation(in: sceneView)
-      let right = SIMD3<Float>(cam.columns.0.x, cam.columns.0.y, cam.columns.0.z)
-      let up    = SIMD3<Float>(cam.columns.1.x, cam.columns.1.y, cam.columns.1.z)
-      let k: Float = 0.0015   // ~1.5 mm of world movement per screen point
-      boxCenter = start + right * Float(t.x) * k - up * Float(t.y) * k
-      updateBoxNode()
-    default:
-      panStartCenter = nil
+  /// A cylinder spanning two points, used as one thick wireframe edge.
+  private func edgeCylinder(_ a: SIMD3<Float>, _ b: SIMD3<Float>,
+                            radius: CGFloat, color: UIColor) -> SCNNode {
+    let dir = b - a
+    let len = simd_length(dir)
+    let cyl = SCNCylinder(radius: radius, height: CGFloat(len))
+    let mat = SCNMaterial()
+    mat.diffuse.contents = color
+    mat.lightingModel    = .constant
+    cyl.materials = [mat]
+    let node = SCNNode(geometry: cyl)
+    node.simdPosition = (a + b) * 0.5
+    // SCNCylinder's axis is local +Y; rotate +Y onto the edge direction.
+    let up  = SIMD3<Float>(0, 1, 0)
+    let d   = len > 0 ? dir / len : up
+    let dot = simd_dot(up, d)
+    if dot < 0.9999 && dot > -0.9999 {
+      let axis  = simd_normalize(simd_cross(up, d))
+      node.simdRotation = SIMD4<Float>(axis.x, axis.y, axis.z, acos(dot))
+    } else if dot <= -0.9999 {
+      node.simdRotation = SIMD4<Float>(1, 0, 0, .pi)
     }
+    return node
   }
 
   /// True if a world-space point lies inside the axis-aligned scan box.
@@ -334,6 +345,20 @@ class LiDARScannerView: UIView, ARSessionDelegate, ARSCNViewDelegate {
   // MARK: - ARSessionDelegate
 
   func session(_ session: ARSession, didUpdate frame: ARFrame) {
+    // Before scanning, keep the scan box floating in front of the camera so the
+    // user can aim it onto the subject. Once scanning starts, it locks in place.
+    if boundingBoxEnabled, scannerMode == "lidar", !isScanning {
+      let cam     = frame.camera.transform
+      let camPos  = SIMD3<Float>(cam.columns.3.x, cam.columns.3.y, cam.columns.3.z)
+      let forward = -SIMD3<Float>(cam.columns.2.x, cam.columns.2.y, cam.columns.2.z)
+      let target  = camPos + forward * followDistance
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        self.boxCenter = target
+        self.updateBoxPosition()
+      }
+    }
+
     guard isScanning, scannerMode == "trueDepthObject" else { return }
     guard let capturedDepth = frame.capturedDepthData else { return }
 

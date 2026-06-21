@@ -7,6 +7,9 @@ interface LiDARScannerViewProps {
   style?: ViewStyle;
   showMeshOverlay?: boolean;
   boundingBoxEnabled?: boolean;
+  boxWidth?: number;
+  boxHeight?: number;
+  boxDepth?: number;
   scannerMode?: ScannerMode;
   isScanning?: boolean;
   exportFilename?: string;
@@ -22,6 +25,9 @@ const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
   style,
   showMeshOverlay = true,
   boundingBoxEnabled = false,
+  boxWidth = 0.6,
+  boxHeight = 1.2,
+  boxDepth = 0.6,
   scannerMode = 'lidar',
   isScanning = false,
   exportFilename = '',
@@ -35,6 +41,9 @@ const LiDARScannerView: React.FC<LiDARScannerViewProps> = ({
       style={style}
       showMeshOverlay={showMeshOverlay}
       boundingBoxEnabled={boundingBoxEnabled}
+      boxWidth={boxWidth}
+      boxHeight={boxHeight}
+      boxDepth={boxDepth}
       scannerMode={scannerMode}
       isScanning={isScanning}
       exportFilename={exportFilename}
