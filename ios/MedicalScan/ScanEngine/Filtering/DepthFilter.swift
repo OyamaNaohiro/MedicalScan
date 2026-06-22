@@ -24,10 +24,17 @@ protocol DepthFilter: AnyObject {
     var priority: Int { get }
 
     /// `frame` を変換し、与えられた `commandBuffer` に GPU 処理を encode して返す。
-    /// 出力テクスチャは `context.texturePool` から借りる（毎フレーム確保を避ける）。
+    /// 出力テクスチャは解像度変化時のみ確保して使い回す（毎フレーム確保を避ける）。
     func encode(_ frame: DepthFrame,
                 commandBuffer: MTLCommandBuffer,
                 context: MetalContext) -> DepthFrame
+
+    /// 内部状態（履歴等）を破棄する。状態を持たないフィルタは既定の空実装でよい。
+    func reset()
+}
+
+extension DepthFilter {
+    func reset() {}
 }
 
 /// フィルタを優先度順に適用するパイプライン。
@@ -52,6 +59,9 @@ final class DepthFilterChain {
     }
 
     func removeAll() { filters.removeAll() }
+
+    /// 全フィルタの内部状態を破棄（スキャン開始/リセット時に呼ぶ）。
+    func reset() { filters.forEach { $0.reset() } }
 
     var isEmpty: Bool { filters.isEmpty }
 

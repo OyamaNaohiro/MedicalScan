@@ -42,4 +42,14 @@
   [_impl setValue:@(confidenceEnabled) forKey:@"confidenceEnabled"];
 }
 
+- (void)setBilateralEnabled:(BOOL)bilateralEnabled {
+  _bilateralEnabled = bilateralEnabled;
+  [_impl setValue:@(bilateralEnabled) forKey:@"bilateralEnabled"];
+}
+
+- (void)setTemporalEnabled:(BOOL)temporalEnabled {
+  _temporalEnabled = temporalEnabled;
+  [_impl setValue:@(temporalEnabled) forKey:@"temporalEnabled"];
+}
+
 @end

@@ -60,6 +60,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     private let context: MetalContext
     private let source: DepthFrameSource
+    private var thermalObserver: NSObjectProtocol?
 
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
@@ -81,6 +82,25 @@ final class ScanEngine: DepthFrameSourceDelegate {
         filterChain.onFilterGPUTime = { [weak self] name, ms in
             self?.onFilterGPUTime?(name, ms)
         }
+        // 端末の発熱状態を監視（ブロック形式で NSObject 化を回避）。
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                self?.handleThermalChange()
+        }
+    }
+
+    deinit {
+        if let thermalObserver {
+            NotificationCenter.default.removeObserver(thermalObserver)
+        }
+    }
+
+    private func handleThermalChange() {
+        let state = ProcessInfo.processInfo.thermalState
+        guard state == .serious || state == .critical else { return }
+        let label = state == .critical ? "critical" : "serious"
+        onEvent?("thermal", "発熱警告: \(label)")
     }
 
     /// TrueDepth を既定ソースとし、標準フィルタ（Confidence）を組み込んで構築する。
@@ -88,14 +108,16 @@ final class ScanEngine: DepthFrameSourceDelegate {
         guard let context = MetalContext() else { return nil }
         let source = TrueDepthSource(context: context)
         let engine = ScanEngine(context: context, source: source, config: config)
-        engine.filterChain.append(ConfidenceFilter(config: config))
-        // Phase 3b: BilateralFilter / TemporalFilter をここに append する。
+        engine.filterChain.append(ConfidenceFilter(config: config))  // priority 10
+        engine.filterChain.append(BilateralFilter(config: config))   // priority 20
+        engine.filterChain.append(TemporalFilter(config: config))    // priority 30
         return engine
     }
 
     // MARK: - 制御 API（Bridge から呼ばれる最小操作）
 
     func start() {
+        filterChain.reset()   // Temporal 等の履歴を破棄してから開始
         setState(.starting)
         source.start()
     }
@@ -107,6 +129,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     /// 累積データの破棄（Phase 4 で TSDF ボリューム再初期化を追加）。
     func reset() {
+        filterChain.reset()
         // tsdf?.clear()
     }
 
@@ -141,5 +164,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     func depthFrameSource(_ source: DepthFrameSource, didFail error: Error) {
         setState(.failed(error.localizedDescription))
+    }
+
+    func depthFrameSource(_ source: DepthFrameSource, didLogEvent kind: String, message: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onEvent?(kind, message)
+        }
     }
 }

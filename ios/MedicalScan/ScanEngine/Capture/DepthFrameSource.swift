@@ -34,9 +34,13 @@ protocol DepthFrameSourceDelegate: AnyObject {
 
     /// 復旧不能なエラー。
     func depthFrameSource(_ source: DepthFrameSource, didFail error: Error)
+
+    /// 任意のイベント通知（深度ロスト/セッション割り込み等）。HUD/ログ用。
+    func depthFrameSource(_ source: DepthFrameSource, didLogEvent kind: String, message: String)
 }
 
 /// 任意実装にするためのデフォルト（録画ソースなどトラッキングが無い実体向け）。
 extension DepthFrameSourceDelegate {
     func depthFrameSource(_ source: DepthFrameSource, didChangeTracking state: ScanTrackingState) {}
+    func depthFrameSource(_ source: DepthFrameSource, didLogEvent kind: String, message: String) {}
 }

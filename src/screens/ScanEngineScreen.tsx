@@ -36,6 +36,8 @@ export default function ScanEngineScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [mode, setMode] = useState<DepthDisplayMode>(DepthDisplayMode.Filtered);
   const [confidenceOn, setConfidenceOn] = useState(true);
+  const [bilateralOn, setBilateralOn] = useState(true);
+  const [temporalOn, setTemporalOn] = useState(true);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -79,6 +81,8 @@ export default function ScanEngineScreen() {
         isScanning={isScanning}
         displayMode={mode}
         confidenceEnabled={confidenceOn}
+        bilateralEnabled={bilateralOn}
+        temporalEnabled={temporalOn}
       />
 
       {/* デバッグ HUD */}
@@ -91,6 +95,14 @@ export default function ScanEngineScreen() {
         <HudRow
           label="Conf GPU"
           value={`${(metrics.filterTimes.Confidence ?? 0).toFixed(2)} ms`}
+        />
+        <HudRow
+          label="Bila GPU"
+          value={`${(metrics.filterTimes.Bilateral ?? 0).toFixed(2)} ms`}
+        />
+        <HudRow
+          label="Temp GPU"
+          value={`${(metrics.filterTimes.Temporal ?? 0).toFixed(2)} ms`}
         />
         <HudRow
           label="Valid px"
@@ -108,13 +120,9 @@ export default function ScanEngineScreen() {
 
       {/* フィルタ ON/OFF */}
       <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={[styles.filterChip, confidenceOn && styles.filterChipActive]}
-          onPress={() => setConfidenceOn(prev => !prev)}>
-          <Text style={[styles.filterText, confidenceOn && styles.filterTextActive]}>
-            Confidence {confidenceOn ? 'ON' : 'OFF'}
-          </Text>
-        </TouchableOpacity>
+        <FilterChip label="Conf" on={confidenceOn} onPress={() => setConfidenceOn(p => !p)} />
+        <FilterChip label="Bila" on={bilateralOn} onPress={() => setBilateralOn(p => !p)} />
+        <FilterChip label="Temp" on={temporalOn} onPress={() => setTemporalOn(p => !p)} />
       </View>
 
       {/* 表示モード切替 */}
@@ -143,6 +151,26 @@ export default function ScanEngineScreen() {
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+  );
+}
+
+function FilterChip({
+  label,
+  on,
+  onPress,
+}: {
+  label: string;
+  on: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.filterChip, on && styles.filterChipActive]}
+      onPress={onPress}>
+      <Text style={[styles.filterText, on && styles.filterTextActive]}>
+        {label} {on ? 'ON' : 'OFF'}
+      </Text>
+    </TouchableOpacity>
   );
 }
 

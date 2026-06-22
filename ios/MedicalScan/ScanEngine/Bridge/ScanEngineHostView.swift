@@ -45,9 +45,15 @@ final class ScanEngineHostView: UIView {
         }
     }
 
-    /// Confidence フィルタの ON/OFF。
+    /// 各フィルタの ON/OFF。
     @objc var confidenceEnabled: Bool = true {
         didSet { engine?.filterChain.setEnabled(confidenceEnabled, for: "Confidence") }
+    }
+    @objc var bilateralEnabled: Bool = true {
+        didSet { engine?.filterChain.setEnabled(bilateralEnabled, for: "Bilateral") }
+    }
+    @objc var temporalEnabled: Bool = true {
+        didSet { engine?.filterChain.setEnabled(temporalEnabled, for: "Temporal") }
     }
 
     // MARK: - Init

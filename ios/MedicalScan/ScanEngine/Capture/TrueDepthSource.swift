@@ -28,6 +28,12 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
     private let queue = DispatchQueue(label: "scanengine.truedepth.capture", qos: .userInitiated)
     private var lastTracking: ScanTrackingState?
 
+    // 深度ロスト検知用。
+    private var lastDepthTime: TimeInterval = 0
+    private var everReceivedDepth = false
+    private var depthLost = false
+    private let depthLostTimeout: TimeInterval = 0.5
+
     init(context: MetalContext) {
         self.context = context
         super.init()
@@ -51,6 +57,9 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
         config.isLightEstimationEnabled = false
         config.maximumNumberOfTrackedFaces = 1
         lastTracking = nil
+        lastDepthTime = 0
+        everReceivedDepth = false
+        depthLost = false
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
@@ -68,8 +77,22 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
             delegate?.depthFrameSource(self, didChangeTracking: tracking)
         }
 
-        // 2) 深度が無いフレームはスキップ（TrueDepth は低レートで来る）
-        guard let avDepth = frame.capturedDepthData else { return }
+        // 2) 深度が無いフレームはスキップ。一定時間来なければ「depthLost」を通知。
+        let now = frame.timestamp
+        guard let avDepth = frame.capturedDepthData else {
+            if everReceivedDepth, !depthLost, now - lastDepthTime > depthLostTimeout {
+                depthLost = true
+                delegate?.depthFrameSource(self, didLogEvent: "depthLost",
+                    message: "深度が取得できません（覆われている/範囲外）")
+            }
+            return
+        }
+        lastDepthTime = now
+        everReceivedDepth = true
+        if depthLost {
+            depthLost = false
+            delegate?.depthFrameSource(self, didLogEvent: "depthResumed", message: "深度を再取得しました")
+        }
 
         // 3) Float32 深度へ正規化
         var depthData = avDepth
@@ -120,6 +143,16 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
 
     func session(_ session: ARSession, didFailWithError error: Error) {
         delegate?.depthFrameSource(self, didFail: error)
+    }
+
+    func sessionWasInterrupted(_ session: ARSession) {
+        delegate?.depthFrameSource(self, didLogEvent: "sessionInterrupted",
+                                   message: "セッションが中断されました")
+    }
+
+    func sessionInterruptionEnded(_ session: ARSession) {
+        delegate?.depthFrameSource(self, didLogEvent: "sessionResumed",
+                                   message: "セッションが再開しました")
     }
 
     // MARK: - Helpers
