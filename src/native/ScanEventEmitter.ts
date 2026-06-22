@@ -16,6 +16,11 @@ export type ScanEventPayload =
       tracking: string;
       displayMode: number;
       filterTimes: {[name: string]: number};
+      tsdfGpuMs: number;
+      tsdfUpdated: number;
+      tsdfActive: number;
+      tsdfOccupancy: number;
+      tsdfMB: number;
     }
   | {type: 'engineState'; state: string; tracking?: string}
   | {type: 'engineError'; message: string}

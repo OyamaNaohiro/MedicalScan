@@ -32,6 +32,13 @@ struct ScanMetrics {
     /// フィルタ名 → 直近 GPU 時間[ms]（Confidence/Bilateral/Temporal）。
     var filterTimes: [String: Double] = [:]
 
+    // TSDF（Phase 4）
+    var tsdfGpuMs: Double = 0
+    var tsdfUpdated: UInt32 = 0
+    var tsdfActive: UInt32 = 0
+    var tsdfOccupancy: Double = 0   // 0..1
+    var tsdfMB: Double = 0
+
     /// ScanEventEmitter で RN へ送るための辞書表現（軽量・数値のみ）。
     var dictionary: [String: Any] {
         [
@@ -44,6 +51,11 @@ struct ScanMetrics {
             "tracking": tracking.label,
             "displayMode": displayMode.rawValue,
             "filterTimes": filterTimes,
+            "tsdfGpuMs": tsdfGpuMs,
+            "tsdfUpdated": Int(tsdfUpdated),
+            "tsdfActive": Int(tsdfActive),
+            "tsdfOccupancy": tsdfOccupancy,
+            "tsdfMB": tsdfMB,
         ]
     }
 }

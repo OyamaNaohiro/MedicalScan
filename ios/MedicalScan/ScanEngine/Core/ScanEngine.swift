@@ -26,6 +26,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var onFilterGPUTime: ((_ name: String, _ ms: Double) -> Void)?
     /// イベントログ（tracking/quality/dropped 等）。メインで呼ぶ。
     var onEvent: ((_ kind: String, _ message: String) -> Void)?
+    /// TSDF 統合の計測値。メインで呼ぶ。
+    var onTSDFStats: ((TSDFStats) -> Void)?
 
     /// 状態はキャプチャキューとメインスレッドの双方から更新され得るため、ロックで保護する
     /// （Thread Sanitizer 対策）。読み取りは公開、更新は `setState` 経由（private）に限定する。
@@ -61,6 +63,10 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private let context: MetalContext
     private let source: DepthFrameSource
     private var thermalObserver: NSObjectProtocol?
+
+    // TSDF（Phase 4）。Mesh は知らない（Phase 5 で別コンポーネント）。
+    private let integrator = TSDFIntegrator()
+    private var tsdf: TSDFVolume?
 
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
@@ -111,6 +117,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         engine.filterChain.append(ConfidenceFilter(config: config))  // priority 10
         engine.filterChain.append(BilateralFilter(config: config))   // priority 20
         engine.filterChain.append(TemporalFilter(config: config))    // priority 30
+        engine.tsdf = TSDFVolume(device: context.device,
+                                 voxelSize: config.voxelSize, extent: config.volumeExtent)
         return engine
     }
 
@@ -118,6 +126,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     func start() {
         filterChain.reset()   // Temporal 等の履歴を破棄してから開始
+        // TSDF ボリュームをクリア（配置もリセット）。
+        if let tsdf, let cb = context.commandQueue.makeCommandBuffer() {
+            tsdf.clear(commandBuffer: cb)
+            cb.commit()
+        }
         setState(.starting)
         source.start()
     }
@@ -146,7 +159,30 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
         // フィルタチェーン（各フィルタが専用 command buffer で encode/commit）。
         let filtered = filterChain.process(frame, context: context)
-        // [Phase 4] tsdf?.integrate(filtered, config: config) ← ここに差し込むだけ
+
+        // TSDF 統合（専用 command buffer で計測。Mesh は作らない）。
+        if let tsdf {
+            if !tsdf.isPositioned {
+                tsdf.position(frontOf: frame.cameraToWorld,
+                              distance: (config.depthMin + config.depthMax) * 0.5)
+            }
+            if let cb = context.commandQueue.makeCommandBuffer() {
+                integrator.integrate(filtered, volume: tsdf, config: config,
+                                     commandBuffer: cb, context: context)
+                cb.addCompletedHandler { [weak self, weak tsdf] buffer in
+                    guard let tsdf else { return }
+                    let (updated, active) = tsdf.readCounters()
+                    var stats = TSDFStats()
+                    stats.gpuMs = (buffer.gpuEndTime - buffer.gpuStartTime) * 1000.0
+                    stats.updated = updated
+                    stats.active = active
+                    stats.total = tsdf.voxelCount
+                    stats.bytes = tsdf.byteCount
+                    DispatchQueue.main.async { self?.onTSDFStats?(stats) }
+                }
+                cb.commit()
+            }
+        }
 
         // プレビュー/比較へ（描画は View 側の責務）。raw と filtered を渡す。
         DispatchQueue.main.async { [weak self] in

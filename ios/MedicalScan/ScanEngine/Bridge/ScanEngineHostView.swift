@@ -134,6 +134,16 @@ final class ScanEngineHostView: UIView {
             DispatchQueue.main.async { self?.metrics.filterTimes[name] = ms }
         }
 
+        // TSDF 計測
+        engine.onTSDFStats = { [weak self] stats in
+            guard let self else { return }
+            self.metrics.tsdfGpuMs = stats.gpuMs
+            self.metrics.tsdfUpdated = stats.updated
+            self.metrics.tsdfActive = stats.active
+            self.metrics.tsdfOccupancy = stats.occupancy
+            self.metrics.tsdfMB = stats.megabytes
+        }
+
         // イベントログ
         engine.onEvent = { [weak self] kind, message in
             _ = self

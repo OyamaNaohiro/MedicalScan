@@ -13,6 +13,11 @@ interface Metrics {
   validRatio: number;
   tracking: string;
   filterTimes: {[name: string]: number};
+  tsdfGpuMs: number;
+  tsdfUpdated: number;
+  tsdfActive: number;
+  tsdfOccupancy: number;
+  tsdfMB: number;
 }
 
 const EMPTY: Metrics = {
@@ -23,6 +28,11 @@ const EMPTY: Metrics = {
   validRatio: 0,
   tracking: '-',
   filterTimes: {},
+  tsdfGpuMs: 0,
+  tsdfUpdated: 0,
+  tsdfActive: 0,
+  tsdfOccupancy: 0,
+  tsdfMB: 0,
 };
 
 const MODES: {label: string; value: DepthDisplayMode}[] = [
@@ -63,6 +73,11 @@ export default function ScanEngineScreen() {
           validRatio: event.validRatio,
           tracking: event.tracking,
           filterTimes: event.filterTimes ?? {},
+          tsdfGpuMs: event.tsdfGpuMs,
+          tsdfUpdated: event.tsdfUpdated,
+          tsdfActive: event.tsdfActive,
+          tsdfOccupancy: event.tsdfOccupancy,
+          tsdfMB: event.tsdfMB,
         });
       } else if (event.type === 'engineLog') {
         setLastEvent(`${event.kind}: ${event.message}`);
@@ -109,6 +124,15 @@ export default function ScanEngineScreen() {
           value={`${(metrics.validRatio * 100).toFixed(1)} %`}
         />
         <HudRow label="Tracking" value={metrics.tracking} />
+        <View style={styles.hudDivider} />
+        <HudRow label="TSDF GPU" value={`${metrics.tsdfGpuMs.toFixed(2)} ms`} />
+        <HudRow label="Updated" value={metrics.tsdfUpdated.toLocaleString()} />
+        <HudRow label="Active" value={metrics.tsdfActive.toLocaleString()} />
+        <HudRow
+          label="Occupancy"
+          value={`${(metrics.tsdfOccupancy * 100).toFixed(2)} %`}
+        />
+        <HudRow label="Volume" value={`${metrics.tsdfMB.toFixed(0)} MB`} />
         {lastEvent !== '' && <Text style={styles.hudEvent}>{lastEvent}</Text>}
       </View>
 
@@ -210,6 +234,7 @@ const styles = StyleSheet.create({
   hudLabel: {color: '#aaa', fontSize: 12, marginRight: 12},
   hudValue: {color: '#fff', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
   hudEvent: {color: '#ffd60a', fontSize: 11, marginTop: 6, maxWidth: 200},
+  hudDivider: {height: 1, backgroundColor: '#444', marginVertical: 4},
   filterRow: {
     flexDirection: 'row',
     justifyContent: 'center',
