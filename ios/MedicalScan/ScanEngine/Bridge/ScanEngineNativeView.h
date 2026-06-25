@@ -10,5 +10,8 @@
 @property (nonatomic) BOOL confidenceEnabled;
 @property (nonatomic) BOOL bilateralEnabled;
 @property (nonatomic) BOOL temporalEnabled;
+@property (nonatomic) NSInteger tsdfDisplay;
+@property (nonatomic) NSInteger tsdfAxis;
+@property (nonatomic) double tsdfSlice;
 
 @end

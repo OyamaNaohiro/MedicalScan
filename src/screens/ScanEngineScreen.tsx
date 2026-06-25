@@ -48,6 +48,9 @@ export default function ScanEngineScreen() {
   const [confidenceOn, setConfidenceOn] = useState(true);
   const [bilateralOn, setBilateralOn] = useState(true);
   const [temporalOn, setTemporalOn] = useState(true);
+  const [tsdfDisplay, setTsdfDisplay] = useState(0); // 0:off 1:dist 2:weight 3:occ
+  const [tsdfAxis, setTsdfAxis] = useState(0); // 0:XY 1:XZ 2:YZ
+  const [tsdfSlice, setTsdfSlice] = useState(0.5);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -98,6 +101,9 @@ export default function ScanEngineScreen() {
         confidenceEnabled={confidenceOn}
         bilateralEnabled={bilateralOn}
         temporalEnabled={temporalOn}
+        tsdfDisplay={tsdfDisplay}
+        tsdfAxis={tsdfAxis}
+        tsdfSlice={tsdfSlice}
       />
 
       {/* デバッグ HUD */}
@@ -148,6 +154,59 @@ export default function ScanEngineScreen() {
         <FilterChip label="Bila" on={bilateralOn} onPress={() => setBilateralOn(p => !p)} />
         <FilterChip label="Temp" on={temporalOn} onPress={() => setTemporalOn(p => !p)} />
       </View>
+
+      {/* TSDF スライス表示 */}
+      <View style={styles.filterRow}>
+        {[
+          {l: 'TSDF Off', v: 0},
+          {l: 'Dist', v: 1},
+          {l: 'Weight', v: 2},
+          {l: 'Occ', v: 3},
+        ].map(o => (
+          <TouchableOpacity
+            key={o.v}
+            style={[styles.filterChip, tsdfDisplay === o.v && styles.filterChipActive]}
+            onPress={() => setTsdfDisplay(o.v)}>
+            <Text
+              style={[styles.filterText, tsdfDisplay === o.v && styles.filterTextActive]}>
+              {o.l}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tsdfDisplay > 0 && (
+        <View style={styles.filterRow}>
+          {[
+            {l: 'XY', v: 0},
+            {l: 'XZ', v: 1},
+            {l: 'YZ', v: 2},
+          ].map(o => (
+            <TouchableOpacity
+              key={o.v}
+              style={[styles.filterChip, tsdfAxis === o.v && styles.filterChipActive]}
+              onPress={() => setTsdfAxis(o.v)}>
+              <Text
+                style={[styles.filterText, tsdfAxis === o.v && styles.filterTextActive]}>
+                {o.l}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={styles.filterChip}
+            onPress={() => setTsdfSlice(s => Math.max(0, Math.round((s - 0.1) * 10) / 10))}>
+            <Text style={styles.filterText}>− Slice</Text>
+          </TouchableOpacity>
+          <View style={styles.filterChip}>
+            <Text style={styles.filterTextActive}>{`${Math.round(tsdfSlice * 100)}%`}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.filterChip}
+            onPress={() => setTsdfSlice(s => Math.min(1, Math.round((s + 0.1) * 10) / 10))}>
+            <Text style={styles.filterText}>Slice +</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 表示モード切替 */}
       <View style={styles.modeRow}>

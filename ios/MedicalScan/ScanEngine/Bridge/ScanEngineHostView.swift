@@ -56,6 +56,13 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.filterChain.setEnabled(temporalEnabled, for: "Temporal") }
     }
 
+    /// TSDF スライス表示。0:off(深度) 1:distance 2:weight 3:occupancy。
+    @objc var tsdfDisplay: Int = 0
+    /// スライス軸。0:XY 1:XZ 2:YZ。
+    @objc var tsdfAxis: Int = 0
+    /// スライス位置 0..1。
+    @objc var tsdfSlice: Double = 0.5
+
     // MARK: - Init
 
     override init(frame: CGRect) {
@@ -119,6 +126,16 @@ final class ScanEngineHostView: UIView {
                                  filtered: filteredTex,
                                  mask: filtered.validMask,
                                  depthMin: cfg.depthMin, depthMax: cfg.depthMax)
+
+            // TSDF スライス表示（ON のときだけ断面を描画して上書き表示）。
+            if self.tsdfDisplay > 0 {
+                let tex = engine.encodeTSDFSlice(mode: self.tsdfDisplay,
+                                                 axis: self.tsdfAxis,
+                                                 slice: Float(self.tsdfSlice))
+                self.preview?.updateSlice(tex)
+            } else {
+                self.preview?.updateSlice(nil)
+            }
 
             self.depthRate.tick()
             self.metrics.depthFPS = self.depthRate.fps

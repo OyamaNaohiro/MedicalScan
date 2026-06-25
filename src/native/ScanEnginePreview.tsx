@@ -16,6 +16,9 @@ interface ScanEnginePreviewProps {
   confidenceEnabled?: boolean;
   bilateralEnabled?: boolean;
   temporalEnabled?: boolean;
+  tsdfDisplay?: number; // 0:off 1:distance 2:weight 3:occupancy
+  tsdfAxis?: number; // 0:XY 1:XZ 2:YZ
+  tsdfSlice?: number; // 0..1
 }
 
 const NativeScanEngineView =
@@ -34,6 +37,9 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   confidenceEnabled = true,
   bilateralEnabled = true,
   temporalEnabled = true,
+  tsdfDisplay = 0,
+  tsdfAxis = 0,
+  tsdfSlice = 0.5,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -46,6 +52,9 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       confidenceEnabled={confidenceEnabled}
       bilateralEnabled={bilateralEnabled}
       temporalEnabled={temporalEnabled}
+      tsdfDisplay={tsdfDisplay}
+      tsdfAxis={tsdfAxis}
+      tsdfSlice={tsdfSlice}
     />
   );
 };

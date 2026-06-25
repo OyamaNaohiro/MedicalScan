@@ -76,3 +76,63 @@ kernel void tsdfIntegrateKernel(
         atomic_fetch_add_explicit(&counters[1], 1u, memory_order_relaxed); // newly active
     }
 }
+
+// MARK: - TSDF Slice Visualization（デバッグ表示。Mesh は作らない）
+
+struct TSDFSliceUniforms {
+    int  dimX; int dimY; int dimZ;
+    int  axis;        // 0:XY(z固定) 1:XZ(y固定) 2:YZ(x固定)
+    int  sliceIndex;  // 固定軸のインデックス
+    int  mode;        // 1:distance 2:weight 3:occupancy
+    float maxWeight;
+};
+
+// 簡易カラーマップ（青→水→緑→黄→赤）。
+static float3 sliceColormap(float t) {
+    t = clamp(t, 0.0, 1.0);
+    return float3(clamp(1.5 - abs(4.0 * t - 3.0), 0.0, 1.0),
+                  clamp(1.5 - abs(4.0 * t - 2.0), 0.0, 1.0),
+                  clamp(1.5 - abs(4.0 * t - 1.0), 0.0, 1.0));
+}
+
+// ボリュームの 1 断面を 2D テクスチャへ色付けして書き出す。
+kernel void tsdfSliceKernel(
+        device const TSDFVoxel*         voxels [[buffer(0)]],
+        constant TSDFSliceUniforms&     u      [[buffer(1)]],
+        texture2d<float, access::write> outTex [[texture(0)]],
+        uint2 gid [[thread_position_in_grid]]) {
+
+    uint ow = outTex.get_width();
+    uint oh = outTex.get_height();
+    if (gid.x >= ow || gid.y >= oh) return;
+
+    // 出力 (gid) → ボクセル (vx,vy,vz)。
+    int vx, vy, vz;
+    if (u.axis == 0)      { vx = int(gid.x); vy = int(gid.y); vz = u.sliceIndex; }
+    else if (u.axis == 1) { vx = int(gid.x); vy = u.sliceIndex; vz = int(gid.y); }
+    else                  { vx = u.sliceIndex; vy = int(gid.x); vz = int(gid.y); }
+
+    if (vx < 0 || vx >= u.dimX || vy < 0 || vy >= u.dimY || vz < 0 || vz >= u.dimZ) {
+        outTex.write(float4(0, 0, 0, 1), gid);
+        return;
+    }
+
+    uint idx = (uint(vz) * uint(u.dimY) + uint(vy)) * uint(u.dimX) + uint(vx);
+    TSDFVoxel v = voxels[idx];
+
+    float4 color = float4(0.04, 0.04, 0.05, 1.0);  // 未観測 = 暗色
+    if (v.weight > 0.0) {
+        if (u.mode == 2) {
+            // weight: 0..maxWeight → カラーマップ
+            color = float4(sliceColormap(v.weight / max(1.0, u.maxWeight)), 1.0);
+        } else if (u.mode == 3) {
+            // occupancy: 観測済み = 緑
+            color = float4(0.1, 0.9, 0.3, 1.0);
+        } else {
+            // distance: tsdf [-1,1] → 青(負/表面奥)〜白(0/表面)〜赤(正/手前)
+            float t = clamp(v.distance * 0.5 + 0.5, 0.0, 1.0);
+            color = float4(sliceColormap(t), 1.0);
+        }
+    }
+    outTex.write(color, gid);
+}

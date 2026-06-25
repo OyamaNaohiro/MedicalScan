@@ -66,6 +66,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // TSDF（Phase 4）。Mesh は知らない（Phase 5 で別コンポーネント）。
     private let integrator = TSDFIntegrator()
+    private let sliceRenderer = TSDFSliceRenderer()
     private var tsdf: TSDFVolume?
 
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
@@ -144,6 +145,19 @@ final class ScanEngine: DepthFrameSourceDelegate {
     func reset() {
         filterChain.reset()
         // tsdf?.clear()
+    }
+
+    /// TSDF 断面を描画してテクスチャを返す（デバッグ表示用。Mesh は作らない）。
+    /// - Parameters: mode 1:distance 2:weight 3:occupancy / axis 0:XY 1:XZ 2:YZ / slice 0..1
+    func encodeTSDFSlice(mode: Int, axis: Int, slice: Float) -> MTLTexture? {
+        guard let tsdf, tsdf.isPositioned,
+              let m = TSDFSliceRenderer.Mode(rawValue: mode),
+              let a = TSDFSliceRenderer.Axis(rawValue: axis),
+              let cb = context.commandQueue.makeCommandBuffer() else { return nil }
+        let tex = sliceRenderer.encode(volume: tsdf, mode: m, axis: a, slice: slice,
+                                       commandBuffer: cb, context: context)
+        cb.commit()
+        return tex
     }
 
     // MARK: - DepthFrameSourceDelegate

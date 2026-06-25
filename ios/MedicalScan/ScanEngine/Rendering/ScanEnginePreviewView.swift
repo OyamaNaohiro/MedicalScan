@@ -40,9 +40,11 @@ final class ScanEnginePreviewView: MTKView {
 
     private let context: MetalContext
     private var pipeline: MTLRenderPipelineState?
+    private var slicePipeline: MTLRenderPipelineState?
     private var rawDepth: MTLTexture?
     private var filteredDepth: MTLTexture?
     private var validMask: MTLTexture?
+    private var sliceTexture: MTLTexture?   // 非nilなら TSDF スライスを優先表示
     private let fpsCounter = RateCounter(alpha: 0.15)
 
     // MARK: - Init
@@ -73,6 +75,15 @@ final class ScanEnginePreviewView: MTKView {
             return nil
         }
         pipeline = pso
+
+        // TSDF スライス表示用パイプライン（同じ頂点 + RGBA そのまま表示）。
+        if let sliceFn = library.makeFunction(name: "tsdfSlicePreviewFragment") {
+            let sdesc = MTLRenderPipelineDescriptor()
+            sdesc.vertexFunction = vfn
+            sdesc.fragmentFunction = sliceFn
+            sdesc.colorAttachments[0].pixelFormat = colorPixelFormat
+            slicePipeline = try? context.device.makeRenderPipelineState(descriptor: sdesc)
+        }
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -93,6 +104,12 @@ final class ScanEnginePreviewView: MTKView {
         self.depthMax = depthMax
         setNeedsDisplay()
     }
+
+    /// TSDF スライステクスチャを設定（nil で深度表示に戻る）。
+    func updateSlice(_ texture: MTLTexture?) {
+        self.sliceTexture = texture
+        setNeedsDisplay()
+    }
 }
 
 // MARK: - MTKViewDelegate（描画ループ）
@@ -102,30 +119,37 @@ extension ScanEnginePreviewView: MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard let pipeline,
-              let raw = rawDepth,
-              let drawable = currentDrawable,
+        guard let drawable = currentDrawable,
               let passDescriptor = currentRenderPassDescriptor,
               let commandBuffer = context.commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
             return
         }
 
-        // nil テクスチャは raw で代替バインド（必ず実テクスチャを束ねる）。フラグで有無を伝える。
-        var uniforms = PreviewUniforms(depthMin: depthMin, depthMax: depthMax,
-                                       mode: UInt32(displayMode.rawValue),
-                                       orientation: orientation,
-                                       mirror: mirror ? 1 : 0,
-                                       hasFiltered: filteredDepth != nil ? 1 : 0,
-                                       hasMask: validMask != nil ? 1 : 0)
-
-        encoder.setRenderPipelineState(pipeline)
-        encoder.setFragmentTexture(raw, index: 0)
-        encoder.setFragmentTexture(filteredDepth ?? raw, index: 1)
-        encoder.setFragmentTexture(validMask ?? raw, index: 2)
-        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PreviewUniforms>.stride, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        encoder.endEncoding()
+        if let slicePipeline, let slice = sliceTexture {
+            // TSDF スライス表示（RGBA そのまま）。
+            encoder.setRenderPipelineState(slicePipeline)
+            encoder.setFragmentTexture(slice, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            encoder.endEncoding()
+        } else if let pipeline, let raw = rawDepth {
+            // 深度表示。nil テクスチャは raw で代替バインドし、フラグで有無を伝える。
+            var uniforms = PreviewUniforms(depthMin: depthMin, depthMax: depthMax,
+                                           mode: UInt32(displayMode.rawValue),
+                                           orientation: orientation,
+                                           mirror: mirror ? 1 : 0,
+                                           hasFiltered: filteredDepth != nil ? 1 : 0,
+                                           hasMask: validMask != nil ? 1 : 0)
+            encoder.setRenderPipelineState(pipeline)
+            encoder.setFragmentTexture(raw, index: 0)
+            encoder.setFragmentTexture(filteredDepth ?? raw, index: 1)
+            encoder.setFragmentTexture(validMask ?? raw, index: 2)
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PreviewUniforms>.stride, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            encoder.endEncoding()
+        } else {
+            encoder.endEncoding()
+        }
 
         commandBuffer.addCompletedHandler { [weak self] cb in
             guard let self else { return }

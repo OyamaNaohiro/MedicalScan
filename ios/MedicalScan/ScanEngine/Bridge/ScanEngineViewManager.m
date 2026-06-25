@@ -23,5 +23,8 @@ RCT_EXPORT_VIEW_PROPERTY(displayMode, NSInteger)
 RCT_EXPORT_VIEW_PROPERTY(confidenceEnabled, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(bilateralEnabled, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(temporalEnabled, BOOL)
+RCT_EXPORT_VIEW_PROPERTY(tsdfDisplay, NSInteger)
+RCT_EXPORT_VIEW_PROPERTY(tsdfAxis, NSInteger)
+RCT_EXPORT_VIEW_PROPERTY(tsdfSlice, double)
 
 @end

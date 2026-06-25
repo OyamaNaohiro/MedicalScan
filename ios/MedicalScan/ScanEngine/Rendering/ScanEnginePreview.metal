@@ -20,6 +20,13 @@ struct VertexOut {
     float2 uv;
 };
 
+// TSDF スライス（BGRA8）をそのまま表示するフラグメント。
+fragment float4 tsdfSlicePreviewFragment(VertexOut in [[stage_in]],
+                                         texture2d<float, access::sample> tex [[texture(0)]]) {
+    constexpr sampler s(address::clamp_to_edge, filter::nearest);
+    return tex.sample(s, float2(in.uv.x, 1.0 - in.uv.y));
+}
+
 vertex VertexOut depthPreviewVertex(uint vid [[vertex_id]]) {
     // (0,0) (2,0) (0,2) の三角形で画面全体を覆う。
     float2 p = float2(float((vid << 1) & 2), float(vid & 2));

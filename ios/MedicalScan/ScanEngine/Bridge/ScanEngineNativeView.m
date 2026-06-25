@@ -52,4 +52,19 @@
   [_impl setValue:@(temporalEnabled) forKey:@"temporalEnabled"];
 }
 
+- (void)setTsdfDisplay:(NSInteger)tsdfDisplay {
+  _tsdfDisplay = tsdfDisplay;
+  [_impl setValue:@(tsdfDisplay) forKey:@"tsdfDisplay"];
+}
+
+- (void)setTsdfAxis:(NSInteger)tsdfAxis {
+  _tsdfAxis = tsdfAxis;
+  [_impl setValue:@(tsdfAxis) forKey:@"tsdfAxis"];
+}
+
+- (void)setTsdfSlice:(double)tsdfSlice {
+  _tsdfSlice = tsdfSlice;
+  [_impl setValue:@(tsdfSlice) forKey:@"tsdfSlice"];
+}
+
 @end
