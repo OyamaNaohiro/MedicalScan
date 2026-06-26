@@ -129,9 +129,12 @@ kernel void tsdfSliceKernel(
             // occupancy: 観測済み = 緑
             color = float4(0.1, 0.9, 0.3, 1.0);
         } else {
-            // distance: tsdf [-1,1] → 青(負/表面奥)〜白(0/表面)〜赤(正/手前)
-            float t = clamp(v.distance * 0.5 + 0.5, 0.0, 1.0);
-            color = float4(sliceColormap(t), 1.0);
+            // distance: ゼロ交差(表面)付近を明るく、自由空間(+1)/奥を暗く → 輪郭が線で見える。
+            float a = clamp(1.0 - abs(v.distance), 0.0, 1.0);
+            a = a * a;   // 表面付近をさらに強調
+            float3 c = (v.distance < 0.0) ? float3(0.3, 0.5, 1.0)    // 表面より奥 = 青
+                                          : float3(1.0, 0.55, 0.2);  // 手前 = 橙
+            color = float4(c * a, 1.0);
         }
     }
     outTex.write(color, gid);
