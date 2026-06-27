@@ -85,6 +85,7 @@ struct SDFSmoothUniforms {
     float amount;            // 自距離→近傍平均ブレンド 0..1
     int  noiseMinNeighbors;  // 観測近傍がこれ未満なら除去
     int  holeFillMinNeighbors; // 観測近傍がこれ以上なら未観測を補完
+    float holeFillWeight;    // 穴埋めボクセルに与える重み（MC しきい値以上にする）
 };
 
 // weight を重みにした近傍平均。観測の少ない領域では形状を崩しすぎない。
@@ -124,7 +125,7 @@ kernel void sdfSmoothKernel(
     } else {
         if (observed >= u.holeFillMinNeighbors && sumW > 0.0) {   // 穴埋め
             dst[idx].distance = sumWD / sumW;
-            dst[idx].weight = 1.0;
+            dst[idx].weight = u.holeFillWeight;   // MC しきい値以上にして表面化させる
         } else {
             dst[idx] = TSDFVoxel{ 0.0, 0.0 };
         }

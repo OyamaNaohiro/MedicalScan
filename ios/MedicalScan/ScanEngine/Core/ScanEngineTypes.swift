@@ -116,8 +116,11 @@ struct ScanConfig {
     var sdfSmoothIterations: Int = 1
     var sdfSmoothRadius: Int = 1          // 近傍半径（1=3^3）
     var sdfSmoothAmount: Float = 0.7      // 自距離→近傍平均へのブレンド 0..1
-    var sdfNoiseMinNeighbors: Int = 3     // 観測近傍がこれ未満なら孤立ノイズとして除去
+    var sdfNoiseMinNeighbors: Int = 5     // 観測近傍がこれ未満なら孤立ノイズとして除去
     var sdfHoleFillMinNeighbors: Int = 16 // 観測近傍がこれ以上なら未観測穴を補完
+
+    // Mesh 抽出（MC）
+    var meshMinWeight: Float = 4          // この重み未満のボクセルは表面化しない（ノイズ抑制）
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）

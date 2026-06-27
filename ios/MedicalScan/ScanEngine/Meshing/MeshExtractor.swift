@@ -79,7 +79,7 @@ final class MarchingCubesExtractor: MeshExtractor {
         var u = Uniforms(dimX: volume.dims.x, dimY: volume.dims.y, dimZ: volume.dims.z,
                          ox: volume.origin.x, oy: volume.origin.y, oz: volume.origin.z,
                          voxelSize: volume.voxelSize, iso: 0,
-                         minWeight: 1, maxVerts: UInt32(maxVerts))
+                         minWeight: config.meshMinWeight, maxVerts: UInt32(maxVerts))
 
         encoder.setComputePipelineState(pso)
         encoder.setBuffer(sourceBuffer, offset: 0, index: 0)   // master か平滑化済みバッファ

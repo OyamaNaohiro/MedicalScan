@@ -17,6 +17,7 @@ final class TSDFSmoother {
         var amount: Float
         var noiseMinNeighbors: Int32
         var holeFillMinNeighbors: Int32
+        var holeFillWeight: Float
     }
 
     // ping-pong バッファ（iterations>1 のときのみ 2 枚使う）。
@@ -37,7 +38,8 @@ final class TSDFSmoother {
                          radius: Int32(max(1, config.sdfSmoothRadius)),
                          amount: config.sdfSmoothAmount,
                          noiseMinNeighbors: Int32(config.sdfNoiseMinNeighbors),
-                         holeFillMinNeighbors: Int32(config.sdfHoleFillMinNeighbors))
+                         holeFillMinNeighbors: Int32(config.sdfHoleFillMinNeighbors),
+                         holeFillWeight: config.meshMinWeight)
 
         let (groups, tpg) = dispatchSize(for: pso, dims: volume.dims, context: context)
 
