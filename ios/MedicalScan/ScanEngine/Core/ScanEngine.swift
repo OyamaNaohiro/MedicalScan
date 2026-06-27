@@ -82,6 +82,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// SDF 平滑化の ON/OFF（A/B 比較用）。
     var sdfSmoothEnabled = true
 
+    /// 現在の追従状態（capture キューで更新）。normal のときだけ配置・統合する。
+    private var currentTracking: ScanTrackingState = .notAvailable
+
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
 
@@ -146,6 +149,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
             tsdf.clear(commandBuffer: cb)
             cb.commit()
         }
+        currentTracking = .notAvailable   // 再開時は追従が normal になるまで配置・統合しない
+        meshFrameCounter = 0
         setState(.starting)
         source.start()
     }
@@ -211,8 +216,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         // フィルタチェーン（各フィルタが専用 command buffer で encode/commit）。
         let filtered = filterChain.process(frame, context: context)
 
-        // TSDF 統合（専用 command buffer で計測。Mesh は作らない）。
-        if let tsdf {
+        // TSDF 統合（追従が安定しているときだけ。不安定な姿勢での配置・統合を避ける）。
+        if currentTracking == .normal, let tsdf {
             if !tsdf.isPositioned {
                 tsdf.position(frontOf: frame.cameraToWorld,
                               distance: (config.depthMin + config.depthMax) * 0.5)
@@ -266,6 +271,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
     }
 
     func depthFrameSource(_ source: DepthFrameSource, didChangeTracking trackingState: ScanTrackingState) {
+        currentTracking = trackingState   // capture キュー上。didOutput と同一キューで一貫
         if case .stopped = state { return }
         setState(.running(tracking: trackingState))
         DispatchQueue.main.async { [weak self] in
