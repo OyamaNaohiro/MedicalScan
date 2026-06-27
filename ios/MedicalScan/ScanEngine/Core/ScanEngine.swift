@@ -75,7 +75,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
     // Mesh 抽出（Phase 5）。Voxel 更新は知らない（読み取りのみ）。
     private var meshExtractor: MarchingCubesExtractor?
     private var meshFrameCounter = 0
-    private let meshExtractInterval = 30   // ~2秒ごと（深度~15fps想定）
+    private let meshExtractInterval = 15   // ~1秒ごと（深度~15fps想定）
 
     // SDF 平滑化（Phase 6, ボリューム空間）。マスターは破壊しない。
     private let smoother = TSDFSmoother()
