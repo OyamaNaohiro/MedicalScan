@@ -18,6 +18,8 @@ interface Metrics {
   tsdfActive: number;
   tsdfOccupancy: number;
   tsdfMB: number;
+  meshTriangles: number;
+  mcGpuMs: number;
 }
 
 const EMPTY: Metrics = {
@@ -33,6 +35,8 @@ const EMPTY: Metrics = {
   tsdfActive: 0,
   tsdfOccupancy: 0,
   tsdfMB: 0,
+  meshTriangles: 0,
+  mcGpuMs: 0,
 };
 
 const MODES: {label: string; value: DepthDisplayMode}[] = [
@@ -81,6 +85,8 @@ export default function ScanEngineScreen() {
           tsdfActive: event.tsdfActive,
           tsdfOccupancy: event.tsdfOccupancy,
           tsdfMB: event.tsdfMB,
+          meshTriangles: event.meshTriangles,
+          mcGpuMs: event.mcGpuMs,
         });
       } else if (event.type === 'engineLog') {
         setLastEvent(`${event.kind}: ${event.message}`);
@@ -139,6 +145,9 @@ export default function ScanEngineScreen() {
           value={`${(metrics.tsdfOccupancy * 100).toFixed(2)} %`}
         />
         <HudRow label="Volume" value={`${metrics.tsdfMB.toFixed(0)} MB`} />
+        <View style={styles.hudDivider} />
+        <HudRow label="Triangles" value={metrics.meshTriangles.toLocaleString()} />
+        <HudRow label="MC GPU" value={`${metrics.mcGpuMs.toFixed(2)} ms`} />
         {lastEvent !== '' && <Text style={styles.hudEvent}>{lastEvent}</Text>}
       </View>
 

@@ -28,6 +28,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var onEvent: ((_ kind: String, _ message: String) -> Void)?
     /// TSDF 統合の計測値。メインで呼ぶ。
     var onTSDFStats: ((TSDFStats) -> Void)?
+    /// Mesh 抽出の計測値。メインで呼ぶ。
+    var onMeshStats: ((MeshStats) -> Void)?
 
     /// 状態はキャプチャキューとメインスレッドの双方から更新され得るため、ロックで保護する
     /// （Thread Sanitizer 対策）。読み取りは公開、更新は `setState` 経由（private）に限定する。
@@ -68,6 +70,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private let integrator = TSDFIntegrator()
     private let sliceRenderer = TSDFSliceRenderer()
     private var tsdf: TSDFVolume?
+
+    // Mesh 抽出（Phase 5）。Voxel 更新は知らない（読み取りのみ）。
+    private var meshExtractor: MarchingCubesExtractor?
+    private var meshFrameCounter = 0
+    private let meshExtractInterval = 30   // ~2秒ごと（深度~15fps想定）
 
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
@@ -120,6 +127,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
         engine.filterChain.append(TemporalFilter(config: config))    // priority 30
         engine.tsdf = TSDFVolume(device: context.device,
                                  voxelSize: config.voxelSize, extent: config.volumeExtent)
+        engine.meshExtractor = MarchingCubesExtractor(device: context.device)
         return engine
     }
 
@@ -193,6 +201,23 @@ final class ScanEngine: DepthFrameSourceDelegate {
                     stats.total = tsdf.voxelCount
                     stats.bytes = tsdf.byteCount
                     DispatchQueue.main.async { self?.onTSDFStats?(stats) }
+                }
+                cb.commit()
+            }
+
+            // Mesh 抽出（重いのでスロットル。Voxel 更新後に読むので順序は queue が保証）。
+            meshFrameCounter += 1
+            if let extractor = meshExtractor, tsdf.isPositioned,
+               meshFrameCounter % meshExtractInterval == 0,
+               let cb = context.commandQueue.makeCommandBuffer() {
+                _ = extractor.extract(volume: tsdf, config: config,
+                                      commandBuffer: cb, context: context)
+                cb.addCompletedHandler { [weak self, weak extractor] buffer in
+                    guard let extractor else { return }
+                    var stats = MeshStats()
+                    stats.gpuMs = (buffer.gpuEndTime - buffer.gpuStartTime) * 1000.0
+                    stats.triangles = extractor.readVertexCount() / 3
+                    DispatchQueue.main.async { self?.onMeshStats?(stats) }
                 }
                 cb.commit()
             }

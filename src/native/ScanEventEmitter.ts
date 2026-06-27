@@ -21,6 +21,8 @@ export type ScanEventPayload =
       tsdfActive: number;
       tsdfOccupancy: number;
       tsdfMB: number;
+      meshTriangles: number;
+      mcGpuMs: number;
     }
   | {type: 'engineState'; state: string; tracking?: string}
   | {type: 'engineError'; message: string}

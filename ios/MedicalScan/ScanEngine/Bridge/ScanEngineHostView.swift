@@ -161,6 +161,13 @@ final class ScanEngineHostView: UIView {
             self.metrics.tsdfMB = stats.megabytes
         }
 
+        // Mesh 計測
+        engine.onMeshStats = { [weak self] stats in
+            guard let self else { return }
+            self.metrics.meshTriangles = stats.triangles
+            self.metrics.mcGpuMs = stats.gpuMs
+        }
+
         // イベントログ
         engine.onEvent = { [weak self] kind, message in
             _ = self
