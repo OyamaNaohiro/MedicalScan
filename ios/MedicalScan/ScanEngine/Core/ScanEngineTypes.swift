@@ -120,7 +120,7 @@ struct ScanConfig {
     var sdfHoleFillMinNeighbors: Int = 16 // 観測近傍がこれ以上なら未観測穴を補完
 
     // Mesh 抽出（MC）
-    var meshMinWeight: Float = 4          // この重み未満のボクセルは表面化しない（ノイズ抑制）
+    var meshMinWeight: Float = 3          // この重み未満のボクセルは表面化しない（ノイズ抑制と成長のバランス）
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）
