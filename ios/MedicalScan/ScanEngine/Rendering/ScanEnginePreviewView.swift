@@ -158,8 +158,8 @@ final class ScanEnginePreviewView: MTKView {
     fileprivate func meshMVP(aspect: Float) -> simd_float4x4 {
         let t = Float(CACurrentMediaTime())
         let angle = t * 0.6
-        let dist = meshRadius * 3.0
-        let eye = meshCenter + SIMD3<Float>(cos(angle) * dist, meshRadius * 0.8, sin(angle) * dist)
+        let dist = meshRadius * 2.0   // 実メッシュ境界に寄せて大きく表示
+        let eye = meshCenter + SIMD3<Float>(cos(angle) * dist, meshRadius * 0.5, sin(angle) * dist)
         let view = Self.lookAt(eye: eye, center: meshCenter, up: SIMD3<Float>(0, 1, 0))
         let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
                                     near: 0.02, far: meshRadius * 12 + 1)

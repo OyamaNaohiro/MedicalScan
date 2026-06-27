@@ -180,6 +180,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
         return (m.vertexBuffer, m.vertexCount)
     }
 
+    /// 抽出メッシュのバウンディング（軌道カメラのフレーミング用）。
+    func currentMeshBounds() -> (center: SIMD3<Float>, radius: Float)? {
+        meshExtractor?.readBounds()
+    }
+
     /// ボリューム中心（ワールド）。軌道カメラの注視点。
     var volumeWorldCenter: SIMD3<Float>? {
         guard let tsdf, tsdf.isPositioned else { return nil }

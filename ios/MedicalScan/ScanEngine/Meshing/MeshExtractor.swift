@@ -43,6 +43,7 @@ final class MarchingCubesExtractor: MeshExtractor {
     private let triTableBuffer: MTLBuffer
     private let vertexBuffer: MTLBuffer
     private let counterBuffer: MTLBuffer   // shared, 4B（頂点数）
+    private let boundsBuffer: MTLBuffer    // shared, 24B（min xyz, max xyz の順序保存uint）
     private let maxVerts: Int
 
     /// - Parameter maxTriangles: 出力上限（48MB ≒ 1.5M頂点 = 500k三角形）
@@ -51,12 +52,14 @@ final class MarchingCubesExtractor: MeshExtractor {
         guard let tt = MarchingCubesExtractor.makeTriTableBuffer(device: device),
               let vb = device.makeBuffer(length: maxVerts * MemoryLayout<SIMD4<Float>>.stride * 2,
                                          options: .storageModePrivate),
-              let cb = device.makeBuffer(length: 4, options: .storageModeShared) else {
+              let cb = device.makeBuffer(length: 4, options: .storageModeShared),
+              let bb = device.makeBuffer(length: 24, options: .storageModeShared) else {
             return nil
         }
         self.triTableBuffer = tt
         self.vertexBuffer = vb
         self.counterBuffer = cb
+        self.boundsBuffer = bb
         vb.label = "MC.vertices"
     }
 
@@ -64,9 +67,11 @@ final class MarchingCubesExtractor: MeshExtractor {
                  commandBuffer: MTLCommandBuffer, context: MetalContext) -> Mesh? {
         guard let pso = context.computePipelineState(named: "marchingCubesKernel") else { return nil }
 
-        // 頂点カウンタを 0 リセット（blit→compute 順序保証）。
+        // 頂点カウンタ=0、バウンディング min=最大値(0xFF) / max=最小値(0x00) にリセット。
         if let blit = commandBuffer.makeBlitCommandEncoder() {
             blit.fill(buffer: counterBuffer, range: 0..<4, value: 0)
+            blit.fill(buffer: boundsBuffer, range: 0..<12, value: 0xFF)   // min スロット
+            blit.fill(buffer: boundsBuffer, range: 12..<24, value: 0x00)  // max スロット
             blit.endEncoding()
         }
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
@@ -82,6 +87,7 @@ final class MarchingCubesExtractor: MeshExtractor {
         encoder.setBuffer(vertexBuffer, offset: 0, index: 2)
         encoder.setBuffer(counterBuffer, offset: 0, index: 3)
         encoder.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 4)
+        encoder.setBuffer(boundsBuffer, offset: 0, index: 5)
 
         let tg = MTLSize(width: 4, height: 4, depth: 4)
         let groups = MTLSize(width: (Int(volume.dims.x) + 3) / 4,
@@ -97,6 +103,22 @@ final class MarchingCubesExtractor: MeshExtractor {
     func readVertexCount() -> Int {
         let c = counterBuffer.contents().bindMemory(to: UInt32.self, capacity: 1).pointee
         return min(Int(c), maxVerts)
+    }
+
+    /// 抽出メッシュのバウンディング（中心・半径）。頂点が無ければ nil。
+    func readBounds() -> (center: SIMD3<Float>, radius: Float)? {
+        guard readVertexCount() > 0 else { return nil }
+        let p = boundsBuffer.contents().bindMemory(to: UInt32.self, capacity: 6)
+        func unflip(_ u: UInt32) -> Float {
+            let mask = ((u >> 31) &- 1) | 0x80000000
+            return Float(bitPattern: u ^ mask)
+        }
+        let mn = SIMD3<Float>(unflip(p[0]), unflip(p[1]), unflip(p[2]))
+        let mx = SIMD3<Float>(unflip(p[3]), unflip(p[4]), unflip(p[5]))
+        guard mn.x.isFinite, mx.x.isFinite, mx.x >= mn.x else { return nil }
+        let center = (mn + mx) * 0.5
+        let radius = max(simd_length(mx - mn) * 0.5, 0.02)
+        return (center, radius)
     }
 
     /// 現在のメッシュ（描画用。vertexCount は readVertexCount で更新）。

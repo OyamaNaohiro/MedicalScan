@@ -138,12 +138,16 @@ final class ScanEngineHostView: UIView {
                                  depthMin: cfg.depthMin, depthMax: cfg.depthMax)
 
             // Mesh 3D 表示（ON のとき最新メッシュを渡す。描画は連続で自動回転）。
-            if self.meshView,
-               let mesh = engine.currentMesh(),
-               let center = engine.volumeWorldCenter,
-               let radius = engine.volumeWorldRadius {
-                self.preview?.updateMesh(buffer: mesh.buffer, count: mesh.count,
-                                         center: center, radius: radius)
+            // カメラはメッシュ実バウンディングに合わせる（無ければボリューム全体）。
+            if self.meshView, let mesh = engine.currentMesh() {
+                let frame = engine.currentMeshBounds()
+                    ?? engine.volumeWorldCenter.flatMap { c in
+                        engine.volumeWorldRadius.map { (center: c, radius: $0) }
+                    }
+                if let frame {
+                    self.preview?.updateMesh(buffer: mesh.buffer, count: mesh.count,
+                                             center: frame.center, radius: frame.radius)
+                }
             }
 
             // TSDF スライス表示（ON のときだけ断面を描画して上書き表示）。
