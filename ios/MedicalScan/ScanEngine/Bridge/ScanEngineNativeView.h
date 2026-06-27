@@ -13,5 +13,6 @@
 @property (nonatomic) NSInteger tsdfDisplay;
 @property (nonatomic) NSInteger tsdfAxis;
 @property (nonatomic) double tsdfSlice;
+@property (nonatomic) BOOL meshView;
 
 @end

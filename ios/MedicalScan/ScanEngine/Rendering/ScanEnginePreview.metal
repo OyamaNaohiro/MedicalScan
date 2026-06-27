@@ -20,6 +20,35 @@ struct VertexOut {
     float2 uv;
 };
 
+// MARK: - Mesh 3D 描画（Marching Cubes 出力を法線シェーディング）
+
+struct MeshVertexIn {
+    float4 position;   // MCVertex と一致（xyz, w=1）
+    float4 normal;     // xyz, w=0
+};
+
+struct MeshVOut {
+    float4 position [[position]];
+    float3 normal;
+};
+
+vertex MeshVOut meshVertex(uint vid [[vertex_id]],
+                           device const MeshVertexIn* verts [[buffer(0)]],
+                           constant float4x4& mvp [[buffer(1)]]) {
+    MeshVOut o;
+    o.position = mvp * float4(verts[vid].position.xyz, 1.0);
+    o.normal = verts[vid].normal.xyz;
+    return o;
+}
+
+fragment float4 meshFragment(MeshVOut in [[stage_in]]) {
+    float3 n = normalize(in.normal);
+    float3 L = normalize(float3(0.4, 0.7, 0.6));
+    // 両面ライティング（vertex soup の向き不定に対応）。
+    float diff = abs(dot(n, L)) * 0.8 + 0.2;
+    return float4(float3(0.70, 0.76, 0.85) * diff, 1.0);
+}
+
 // TSDF スライス（BGRA8）をそのまま表示するフラグメント。
 fragment float4 tsdfSlicePreviewFragment(VertexOut in [[stage_in]],
                                          texture2d<float, access::sample> tex [[texture(0)]]) {

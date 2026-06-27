@@ -12,6 +12,7 @@
 
 import Metal
 import Foundation
+import simd
 
 /// パイプライン統括。スレッド安全のため状態更新と通知は内部で適切にマーシャリングする。
 final class ScanEngine: DepthFrameSourceDelegate {
@@ -166,6 +167,24 @@ final class ScanEngine: DepthFrameSourceDelegate {
                                        commandBuffer: cb, context: context)
         cb.commit()
         return tex
+    }
+
+    /// 現在抽出済みのメッシュ（描画用）。頂点が無ければ nil。
+    func currentMesh() -> (buffer: MTLBuffer, count: Int)? {
+        guard let m = meshExtractor?.currentMesh(), m.vertexCount > 0 else { return nil }
+        return (m.vertexBuffer, m.vertexCount)
+    }
+
+    /// ボリューム中心（ワールド）。軌道カメラの注視点。
+    var volumeWorldCenter: SIMD3<Float>? {
+        guard let tsdf, tsdf.isPositioned else { return nil }
+        return tsdf.origin + tsdf.extent * 0.5
+    }
+
+    /// ボリューム半径（ワールド）。軌道カメラの距離決定用。
+    var volumeWorldRadius: Float? {
+        guard let tsdf else { return nil }
+        return simd_length(tsdf.extent) * 0.5
     }
 
     // MARK: - DepthFrameSourceDelegate

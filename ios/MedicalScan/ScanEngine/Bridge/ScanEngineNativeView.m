@@ -67,4 +67,9 @@
   [_impl setValue:@(tsdfSlice) forKey:@"tsdfSlice"];
 }
 
+- (void)setMeshView:(BOOL)meshView {
+  _meshView = meshView;
+  [_impl setValue:@(meshView) forKey:@"meshView"];
+}
+
 @end

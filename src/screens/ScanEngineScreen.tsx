@@ -55,6 +55,7 @@ export default function ScanEngineScreen() {
   const [tsdfDisplay, setTsdfDisplay] = useState(0); // 0:off 1:dist 2:weight 3:occ
   const [tsdfAxis, setTsdfAxis] = useState(0); // 0:XY 1:XZ 2:YZ
   const [tsdfSlice, setTsdfSlice] = useState(0.5);
+  const [meshView, setMeshView] = useState(false);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -110,6 +111,7 @@ export default function ScanEngineScreen() {
         tsdfDisplay={tsdfDisplay}
         tsdfAxis={tsdfAxis}
         tsdfSlice={tsdfSlice}
+        meshView={meshView}
       />
 
       {/* デバッグ HUD */}
@@ -157,11 +159,12 @@ export default function ScanEngineScreen() {
         </View>
       )}
 
-      {/* フィルタ ON/OFF */}
+      {/* フィルタ ON/OFF + メッシュ3D表示 */}
       <View style={styles.filterRow}>
         <FilterChip label="Conf" on={confidenceOn} onPress={() => setConfidenceOn(p => !p)} />
         <FilterChip label="Bila" on={bilateralOn} onPress={() => setBilateralOn(p => !p)} />
         <FilterChip label="Temp" on={temporalOn} onPress={() => setTemporalOn(p => !p)} />
+        <FilterChip label="Mesh3D" on={meshView} onPress={() => setMeshView(p => !p)} />
       </View>
 
       {/* TSDF スライス表示 */}

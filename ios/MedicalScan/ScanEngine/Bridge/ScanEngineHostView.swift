@@ -63,6 +63,11 @@ final class ScanEngineHostView: UIView {
     /// スライス位置 0..1。
     @objc var tsdfSlice: Double = 0.5
 
+    /// メッシュ 3D 表示（軌道カメラ）。
+    @objc var meshView: Bool = false {
+        didSet { preview?.meshEnabled = meshView }
+    }
+
     // MARK: - Init
 
     override init(frame: CGRect) {
@@ -126,6 +131,15 @@ final class ScanEngineHostView: UIView {
                                  filtered: filteredTex,
                                  mask: filtered.validMask,
                                  depthMin: cfg.depthMin, depthMax: cfg.depthMax)
+
+            // Mesh 3D 表示（ON のとき最新メッシュを渡す。描画は連続で自動回転）。
+            if self.meshView,
+               let mesh = engine.currentMesh(),
+               let center = engine.volumeWorldCenter,
+               let radius = engine.volumeWorldRadius {
+                self.preview?.updateMesh(buffer: mesh.buffer, count: mesh.count,
+                                         center: center, radius: radius)
+            }
 
             // TSDF スライス表示（ON のときだけ断面を描画して上書き表示）。
             if self.tsdfDisplay > 0 {

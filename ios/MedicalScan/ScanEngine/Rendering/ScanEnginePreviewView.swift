@@ -41,11 +41,26 @@ final class ScanEnginePreviewView: MTKView {
     private let context: MetalContext
     private var pipeline: MTLRenderPipelineState?
     private var slicePipeline: MTLRenderPipelineState?
+    private var meshPipeline: MTLRenderPipelineState?
+    private var depthState: MTLDepthStencilState?
     private var rawDepth: MTLTexture?
     private var filteredDepth: MTLTexture?
     private var validMask: MTLTexture?
     private var sliceTexture: MTLTexture?   // 非nilなら TSDF スライスを優先表示
     private let fpsCounter = RateCounter(alpha: 0.15)
+
+    // Mesh 3D 表示
+    private var meshBuffer: MTLBuffer?
+    private var meshCount = 0
+    private var meshCenter = SIMD3<Float>(0, 0, 0)
+    private var meshRadius: Float = 0.5
+    /// true で 3D メッシュ表示（連続描画して自動回転）。
+    var meshEnabled = false {
+        didSet {
+            isPaused = !meshEnabled        // メッシュ表示中は連続描画
+            if !meshEnabled { setNeedsDisplay() }
+        }
+    }
 
     // MARK: - Init
 
@@ -54,11 +69,13 @@ final class ScanEnginePreviewView: MTKView {
         super.init(frame: .zero, device: context.device)
 
         colorPixelFormat = .bgra8Unorm
+        depthStencilPixelFormat = .depth32Float   // メッシュ 3D 描画の深度テスト用
         framebufferOnly = true
         isOpaque = true
-        // 新しい深度が来たときだけ描く（無駄な GPU 稼働を避ける）。
+        // 新しい深度が来たときだけ描く（無駄な GPU 稼働を避ける）。メッシュ表示時は連続描画。
         isPaused = true
         enableSetNeedsDisplay = true
+        preferredFramesPerSecond = 60
         delegate = self
         clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
 
@@ -67,10 +84,12 @@ final class ScanEnginePreviewView: MTKView {
               let ffn = library.makeFunction(name: "depthPreviewFragment") else {
             return nil
         }
+        // 深度アタッチメントを持つパスで使うため、全パイプラインで depth フォーマットを一致させる。
         let desc = MTLRenderPipelineDescriptor()
         desc.vertexFunction = vfn
         desc.fragmentFunction = ffn
         desc.colorAttachments[0].pixelFormat = colorPixelFormat
+        desc.depthAttachmentPixelFormat = depthStencilPixelFormat
         guard let pso = try? context.device.makeRenderPipelineState(descriptor: desc) else {
             return nil
         }
@@ -82,8 +101,24 @@ final class ScanEnginePreviewView: MTKView {
             sdesc.vertexFunction = vfn
             sdesc.fragmentFunction = sliceFn
             sdesc.colorAttachments[0].pixelFormat = colorPixelFormat
+            sdesc.depthAttachmentPixelFormat = depthStencilPixelFormat
             slicePipeline = try? context.device.makeRenderPipelineState(descriptor: sdesc)
         }
+
+        // Mesh 3D 描画パイプライン（深度テスト付き）。
+        if let mvfn = library.makeFunction(name: "meshVertex"),
+           let mffn = library.makeFunction(name: "meshFragment") {
+            let mdesc = MTLRenderPipelineDescriptor()
+            mdesc.vertexFunction = mvfn
+            mdesc.fragmentFunction = mffn
+            mdesc.colorAttachments[0].pixelFormat = colorPixelFormat
+            mdesc.depthAttachmentPixelFormat = depthStencilPixelFormat
+            meshPipeline = try? context.device.makeRenderPipelineState(descriptor: mdesc)
+        }
+        let dsd = MTLDepthStencilDescriptor()
+        dsd.depthCompareFunction = .less
+        dsd.isDepthWriteEnabled = true
+        depthState = context.device.makeDepthStencilState(descriptor: dsd)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -110,6 +145,48 @@ final class ScanEnginePreviewView: MTKView {
         self.sliceTexture = texture
         setNeedsDisplay()
     }
+
+    /// 3D 表示するメッシュを設定（vertex soup = MCVertex 32B/頂点）。
+    func updateMesh(buffer: MTLBuffer?, count: Int, center: SIMD3<Float>, radius: Float) {
+        self.meshBuffer = buffer
+        self.meshCount = count
+        self.meshCenter = center
+        self.meshRadius = max(0.05, radius)
+    }
+
+    /// 時間で回る軌道カメラの MVP を作る。
+    fileprivate func meshMVP(aspect: Float) -> simd_float4x4 {
+        let t = Float(CACurrentMediaTime())
+        let angle = t * 0.6
+        let dist = meshRadius * 3.0
+        let eye = meshCenter + SIMD3<Float>(cos(angle) * dist, meshRadius * 0.8, sin(angle) * dist)
+        let view = Self.lookAt(eye: eye, center: meshCenter, up: SIMD3<Float>(0, 1, 0))
+        let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
+                                    near: 0.02, far: meshRadius * 12 + 1)
+        return proj * view
+    }
+
+    static func lookAt(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
+        let f = simd_normalize(center - eye)
+        let s = simd_normalize(simd_cross(f, up))
+        let u = simd_cross(s, f)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(s.x, u.x, -f.x, 0),
+            SIMD4<Float>(s.y, u.y, -f.y, 0),
+            SIMD4<Float>(s.z, u.z, -f.z, 0),
+            SIMD4<Float>(-simd_dot(s, eye), -simd_dot(u, eye), simd_dot(f, eye), 1)))
+    }
+
+    static func perspective(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
+        let y = 1 / tan(fovY * 0.5)
+        let x = y / aspect
+        let z = far / (near - far)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(x, 0, 0, 0),
+            SIMD4<Float>(0, y, 0, 0),
+            SIMD4<Float>(0, 0, z, -1),
+            SIMD4<Float>(0, 0, z * near, 0)))
+    }
 }
 
 // MARK: - MTKViewDelegate（描画ループ）
@@ -126,7 +203,18 @@ extension ScanEnginePreviewView: MTKViewDelegate {
             return
         }
 
-        if let slicePipeline, let slice = sliceTexture {
+        if meshEnabled, let meshPipeline, let meshBuffer, meshCount > 0 {
+            // Mesh 3D 表示（軌道カメラ + 深度テスト）。
+            let aspect = Float(max(1, drawableSize.width) / max(1, drawableSize.height))
+            var mvp = meshMVP(aspect: aspect)
+            encoder.setRenderPipelineState(meshPipeline)
+            if let depthState { encoder.setDepthStencilState(depthState) }
+            encoder.setCullMode(.none)   // vertex soup は向き不定
+            encoder.setVertexBuffer(meshBuffer, offset: 0, index: 0)
+            encoder.setVertexBytes(&mvp, length: MemoryLayout<simd_float4x4>.stride, index: 1)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshCount)
+            encoder.endEncoding()
+        } else if let slicePipeline, let slice = sliceTexture, !meshEnabled {
             // TSDF スライス表示（RGBA そのまま）。
             encoder.setRenderPipelineState(slicePipeline)
             encoder.setFragmentTexture(slice, index: 0)

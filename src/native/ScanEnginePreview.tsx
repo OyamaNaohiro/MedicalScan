@@ -19,6 +19,7 @@ interface ScanEnginePreviewProps {
   tsdfDisplay?: number; // 0:off 1:distance 2:weight 3:occupancy
   tsdfAxis?: number; // 0:XY 1:XZ 2:YZ
   tsdfSlice?: number; // 0..1
+  meshView?: boolean; // 3Dメッシュ表示
 }
 
 const NativeScanEngineView =
@@ -40,6 +41,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   tsdfDisplay = 0,
   tsdfAxis = 0,
   tsdfSlice = 0.5,
+  meshView = false,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -55,6 +57,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       tsdfDisplay={tsdfDisplay}
       tsdfAxis={tsdfAxis}
       tsdfSlice={tsdfSlice}
+      meshView={meshView}
     />
   );
 };
