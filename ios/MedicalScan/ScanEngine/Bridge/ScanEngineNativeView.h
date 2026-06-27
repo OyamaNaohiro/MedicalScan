@@ -14,5 +14,6 @@
 @property (nonatomic) NSInteger tsdfAxis;
 @property (nonatomic) double tsdfSlice;
 @property (nonatomic) BOOL meshView;
+@property (nonatomic) BOOL sdfSmooth;
 
 @end

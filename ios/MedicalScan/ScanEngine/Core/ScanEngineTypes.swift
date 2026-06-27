@@ -111,6 +111,13 @@ struct ScanConfig {
 
     // TSDF
     var maxWeight: Float = 64       // 重み上限（適応性を保つ）
+
+    // SDF 平滑化（ボリューム空間。MC 前に距離場を整える）
+    var sdfSmoothIterations: Int = 1
+    var sdfSmoothRadius: Int = 1          // 近傍半径（1=3^3）
+    var sdfSmoothAmount: Float = 0.7      // 自距離→近傍平均へのブレンド 0..1
+    var sdfNoiseMinNeighbors: Int = 3     // 観測近傍がこれ未満なら孤立ノイズとして除去
+    var sdfHoleFillMinNeighbors: Int = 16 // 観測近傍がこれ以上なら未観測穴を補完
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）

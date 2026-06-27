@@ -72,4 +72,9 @@
   [_impl setValue:@(meshView) forKey:@"meshView"];
 }
 
+- (void)setSdfSmooth:(BOOL)sdfSmooth {
+  _sdfSmooth = sdfSmooth;
+  [_impl setValue:@(sdfSmooth) forKey:@"sdfSmooth"];
+}
+
 @end

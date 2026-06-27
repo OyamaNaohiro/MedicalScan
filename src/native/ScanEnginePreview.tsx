@@ -20,6 +20,7 @@ interface ScanEnginePreviewProps {
   tsdfAxis?: number; // 0:XY 1:XZ 2:YZ
   tsdfSlice?: number; // 0..1
   meshView?: boolean; // 3Dメッシュ表示
+  sdfSmooth?: boolean; // SDF平滑化 ON/OFF
 }
 
 const NativeScanEngineView =
@@ -42,6 +43,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   tsdfAxis = 0,
   tsdfSlice = 0.5,
   meshView = false,
+  sdfSmooth = true,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -58,6 +60,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       tsdfAxis={tsdfAxis}
       tsdfSlice={tsdfSlice}
       meshView={meshView}
+      sdfSmooth={sdfSmooth}
     />
   );
 };

@@ -22,8 +22,9 @@ struct MeshStats {
 }
 
 /// ボリューム→メッシュ抽出の抽象（Mesh は Voxel 更新を知らない）。
+/// sourceBuffer に平滑化済みバッファを渡すこともできる（dims/原点は volume を使用）。
 protocol MeshExtractor: AnyObject {
-    func extract(volume: TSDFVolume, config: ScanConfig,
+    func extract(volume: TSDFVolume, sourceBuffer: MTLBuffer, config: ScanConfig,
                  commandBuffer: MTLCommandBuffer, context: MetalContext) -> Mesh?
     func readVertexCount() -> Int
 }
@@ -59,7 +60,7 @@ final class MarchingCubesExtractor: MeshExtractor {
         vb.label = "MC.vertices"
     }
 
-    func extract(volume: TSDFVolume, config: ScanConfig,
+    func extract(volume: TSDFVolume, sourceBuffer: MTLBuffer, config: ScanConfig,
                  commandBuffer: MTLCommandBuffer, context: MetalContext) -> Mesh? {
         guard let pso = context.computePipelineState(named: "marchingCubesKernel") else { return nil }
 
@@ -76,7 +77,7 @@ final class MarchingCubesExtractor: MeshExtractor {
                          minWeight: 1, maxVerts: UInt32(maxVerts))
 
         encoder.setComputePipelineState(pso)
-        encoder.setBuffer(volume.voxelBuffer, offset: 0, index: 0)
+        encoder.setBuffer(sourceBuffer, offset: 0, index: 0)   // master か平滑化済みバッファ
         encoder.setBuffer(triTableBuffer, offset: 0, index: 1)
         encoder.setBuffer(vertexBuffer, offset: 0, index: 2)
         encoder.setBuffer(counterBuffer, offset: 0, index: 3)

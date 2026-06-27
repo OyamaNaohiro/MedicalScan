@@ -77,6 +77,60 @@ kernel void tsdfIntegrateKernel(
     }
 }
 
+// MARK: - SDF Smoothing（ボリューム空間。weight 考慮 + 穴埋め + 孤立ノイズ抑制）
+
+struct SDFSmoothUniforms {
+    int  dimX; int dimY; int dimZ;
+    int  radius;              // 近傍半径
+    float amount;            // 自距離→近傍平均ブレンド 0..1
+    int  noiseMinNeighbors;  // 観測近傍がこれ未満なら除去
+    int  holeFillMinNeighbors; // 観測近傍がこれ以上なら未観測を補完
+};
+
+// weight を重みにした近傍平均。観測の少ない領域では形状を崩しすぎない。
+//   観測ボクセル: 近傍平均へブレンド。近傍が少なければ孤立ノイズとして除去。
+//   未観測ボクセル: 十分囲まれていれば補完（穴埋め）、そうでなければ未観測のまま。
+kernel void sdfSmoothKernel(
+        device const TSDFVoxel*    src [[buffer(0)]],
+        device TSDFVoxel*          dst [[buffer(1)]],
+        constant SDFSmoothUniforms& u  [[buffer(2)]],
+        uint3 gid [[thread_position_in_grid]]) {
+
+    if (int(gid.x) >= u.dimX || int(gid.y) >= u.dimY || int(gid.z) >= u.dimZ) return;
+    uint idx = (gid.z * uint(u.dimY) + gid.y) * uint(u.dimX) + gid.x;
+    TSDFVoxel self = src[idx];
+
+    float sumWD = 0.0, sumW = 0.0;
+    int observed = 0;
+    int r = u.radius;
+    for (int dz = -r; dz <= r; ++dz)
+    for (int dy = -r; dy <= r; ++dy)
+    for (int dx = -r; dx <= r; ++dx) {
+        int nx = int(gid.x) + dx, ny = int(gid.y) + dy, nz = int(gid.z) + dz;
+        if (nx < 0 || nx >= u.dimX || ny < 0 || ny >= u.dimY || nz < 0 || nz >= u.dimZ) continue;
+        uint nidx = (uint(nz) * uint(u.dimY) + uint(ny)) * uint(u.dimX) + uint(nx);
+        TSDFVoxel n = src[nidx];
+        if (n.weight > 0.0) { sumWD += n.weight * n.distance; sumW += n.weight; observed++; }
+    }
+
+    if (self.weight > 0.0) {
+        if (observed < u.noiseMinNeighbors) {   // 孤立ノイズ → 除去
+            dst[idx] = TSDFVoxel{ 0.0, 0.0 };
+            return;
+        }
+        float avg = (sumW > 0.0) ? sumWD / sumW : self.distance;
+        dst[idx].distance = mix(self.distance, avg, u.amount);
+        dst[idx].weight = self.weight;
+    } else {
+        if (observed >= u.holeFillMinNeighbors && sumW > 0.0) {   // 穴埋め
+            dst[idx].distance = sumWD / sumW;
+            dst[idx].weight = 1.0;
+        } else {
+            dst[idx] = TSDFVoxel{ 0.0, 0.0 };
+        }
+    }
+}
+
 // MARK: - TSDF Slice Visualization（デバッグ表示。Mesh は作らない）
 
 struct TSDFSliceUniforms {

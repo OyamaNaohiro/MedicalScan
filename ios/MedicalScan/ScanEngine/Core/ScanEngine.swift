@@ -77,6 +77,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private var meshFrameCounter = 0
     private let meshExtractInterval = 30   // ~2秒ごと（深度~15fps想定）
 
+    // SDF 平滑化（Phase 6, ボリューム空間）。マスターは破壊しない。
+    private let smoother = TSDFSmoother()
+    /// SDF 平滑化の ON/OFF（A/B 比較用）。
+    var sdfSmoothEnabled = true
+
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
 
@@ -229,7 +234,14 @@ final class ScanEngine: DepthFrameSourceDelegate {
             if let extractor = meshExtractor, tsdf.isPositioned,
                meshFrameCounter % meshExtractInterval == 0,
                let cb = context.commandQueue.makeCommandBuffer() {
-                _ = extractor.extract(volume: tsdf, config: config,
+                // SDF 平滑化（ON のとき）→ その結果から MC。OFF はマスターから直接。
+                var source = tsdf.voxelBuffer
+                if sdfSmoothEnabled,
+                   let smoothed = smoother.smooth(volume: tsdf, config: config,
+                                                  commandBuffer: cb, context: context) {
+                    source = smoothed
+                }
+                _ = extractor.extract(volume: tsdf, sourceBuffer: source, config: config,
                                       commandBuffer: cb, context: context)
                 cb.addCompletedHandler { [weak self, weak extractor] buffer in
                     guard let extractor else { return }

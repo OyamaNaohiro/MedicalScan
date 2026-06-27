@@ -68,6 +68,11 @@ final class ScanEngineHostView: UIView {
         didSet { preview?.meshEnabled = meshView }
     }
 
+    /// SDF 平滑化（ボリューム空間）の ON/OFF。
+    @objc var sdfSmooth: Bool = true {
+        didSet { engine?.sdfSmoothEnabled = sdfSmooth }
+    }
+
     // MARK: - Init
 
     override init(frame: CGRect) {
