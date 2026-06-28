@@ -126,6 +126,31 @@ final class MarchingCubesExtractor: MeshExtractor {
         Mesh(vertexBuffer: vertexBuffer, vertexCount: readVertexCount())
     }
 
+    /// GPU 頂点バッファ（private）を CPU へ読み戻し、頂点位置列（vertex soup）を返す。
+    /// エクスポート専用。blit→待機するためバックグラウンドで呼ぶこと。
+    func readbackPositions(context: MetalContext) -> [SIMD3<Float>] {
+        let count = readVertexCount()
+        guard count > 0 else { return [] }
+        let bytes = count * MemoryLayout<SIMD4<Float>>.stride * 2   // MCVertex = pos float4 + normal float4
+        guard let staging = context.device.makeBuffer(length: bytes, options: .storageModeShared),
+              let cb = context.commandQueue.makeCommandBuffer(),
+              let blit = cb.makeBlitCommandEncoder() else { return [] }
+        blit.copy(from: vertexBuffer, sourceOffset: 0, to: staging, destinationOffset: 0, size: bytes)
+        blit.endEncoding()
+        cb.commit()
+        cb.waitUntilCompleted()
+
+        // MCVertex は 8 個の Float（pos.xyzw, normal.xyzw）。pos.xyz のみ取り出す。
+        let ptr = staging.contents().bindMemory(to: Float.self, capacity: count * 8)
+        var positions = [SIMD3<Float>]()
+        positions.reserveCapacity(count)
+        for i in 0..<count {
+            let b = i * 8
+            positions.append(SIMD3<Float>(ptr[b], ptr[b + 1], ptr[b + 2]))
+        }
+        return positions
+    }
+
     // MARK: - Marching Cubes 三角形テーブル（標準 Bourke。LiDAR 実装と同一）
 
     private static func makeTriTableBuffer(device: MTLDevice) -> MTLBuffer? {

@@ -21,6 +21,8 @@ interface ScanEnginePreviewProps {
   tsdfSlice?: number; // 0..1
   meshView?: boolean; // 3Dメッシュ表示
   sdfSmooth?: boolean; // SDF平滑化 ON/OFF
+  exportFormat?: number; // 0:binary 1:ascii
+  exportRequest?: number; // タイムスタンプ変化で保存実行
 }
 
 const NativeScanEngineView =
@@ -44,6 +46,8 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   tsdfSlice = 0.5,
   meshView = false,
   sdfSmooth = true,
+  exportFormat = 0,
+  exportRequest = 0,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -61,6 +65,8 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       tsdfSlice={tsdfSlice}
       meshView={meshView}
       sdfSmooth={sdfSmooth}
+      exportFormat={exportFormat}
+      exportRequest={exportRequest}
     />
   );
 };

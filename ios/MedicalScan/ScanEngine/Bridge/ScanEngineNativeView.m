@@ -77,4 +77,14 @@
   [_impl setValue:@(sdfSmooth) forKey:@"sdfSmooth"];
 }
 
+- (void)setExportFormat:(NSInteger)exportFormat {
+  _exportFormat = exportFormat;
+  [_impl setValue:@(exportFormat) forKey:@"exportFormat"];
+}
+
+- (void)setExportRequest:(double)exportRequest {
+  _exportRequest = exportRequest;
+  [_impl setValue:@(exportRequest) forKey:@"exportRequest"];
+}
+
 @end

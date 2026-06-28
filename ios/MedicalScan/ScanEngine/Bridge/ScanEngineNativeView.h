@@ -15,5 +15,7 @@
 @property (nonatomic) double tsdfSlice;
 @property (nonatomic) BOOL meshView;
 @property (nonatomic) BOOL sdfSmooth;
+@property (nonatomic) NSInteger exportFormat;
+@property (nonatomic) double exportRequest;
 
 @end

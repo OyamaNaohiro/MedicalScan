@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import {ScanEnginePreview, DepthDisplayMode} from '../native/ScanEnginePreview';
@@ -57,6 +57,8 @@ export default function ScanEngineScreen() {
   const [tsdfSlice, setTsdfSlice] = useState(0.5);
   const [meshView, setMeshView] = useState(false);
   const [sdfSmooth, setSdfSmooth] = useState(true);
+  const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
+  const [exportReq, setExportReq] = useState(0);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -92,9 +94,10 @@ export default function ScanEngineScreen() {
         });
       } else if (event.type === 'engineLog') {
         setLastEvent(`${event.kind}: ${event.message}`);
+      } else if (event.type === 'exported') {
+        Alert.alert('保存しました', event.path);
       } else if (event.type === 'engineError') {
         setEngineError(event.message);
-        setIsScanning(false);
       }
     });
     return () => sub.remove();
@@ -114,6 +117,8 @@ export default function ScanEngineScreen() {
         tsdfSlice={tsdfSlice}
         meshView={meshView}
         sdfSmooth={sdfSmooth}
+        exportFormat={exportFormat}
+        exportRequest={exportReq}
       />
 
       {/* デバッグ HUD */}
@@ -238,6 +243,25 @@ export default function ScanEngineScreen() {
         ))}
       </View>
 
+      {/* STL 保存 */}
+      <View style={styles.filterRow}>
+        <FilterChip
+          label="Bin"
+          on={exportFormat === 0}
+          onPress={() => setExportFormat(0)}
+        />
+        <FilterChip
+          label="ASCII"
+          on={exportFormat === 1}
+          onPress={() => setExportFormat(1)}
+        />
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={() => setExportReq(Date.now())}>
+          <Text style={styles.saveButtonText}>STL保存</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* 開始/停止 */}
       <View style={styles.controls}>
         <TouchableOpacity
@@ -326,6 +350,13 @@ const styles = StyleSheet.create({
   filterChipActive: {backgroundColor: '#0a84ff', borderColor: '#0a84ff'},
   filterText: {color: '#bbb', fontSize: 12, fontWeight: '600'},
   filterTextActive: {color: '#fff'},
+  saveButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#34c759',
+  },
+  saveButtonText: {color: '#fff', fontSize: 12, fontWeight: '700'},
   errorBox: {
     position: 'absolute',
     top: 16,

@@ -73,6 +73,41 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.sdfSmoothEnabled = sdfSmooth }
     }
 
+    /// STL 形式。0:binary 1:ascii。
+    @objc var exportFormat: Int = 0
+    /// 保存トリガー（タイムスタンプ。変化で保存実行）。
+    @objc var exportRequest: Double = 0 {
+        didSet {
+            guard exportRequest > 0, exportRequest != oldValue, let engine else { return }
+            let binary = exportFormat == 0
+            let ts = Int(exportRequest)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let url = engine.exportSTL(binary: binary, filename: "scan_\(ts)")
+                DispatchQueue.main.async {
+                    if let url {
+                        ScanEventEmitter.emitEvent(["type": "exported", "path": url.path])
+                        self?.presentShare(url)
+                    } else {
+                        ScanEventEmitter.emitEvent(["type": "engineError",
+                            "message": "メッシュがありません。スキャンしてから保存してください。"])
+                    }
+                }
+            }
+        }
+    }
+
+    private func presentShare(_ url: URL) {
+        guard let rootVC = window?.rootViewController else { return }
+        var top = rootVC
+        while let presented = top.presentedViewController { top = presented }
+        let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let pop = vc.popoverPresentationController {
+            pop.sourceView = self
+            pop.sourceRect = CGRect(x: bounds.midX, y: bounds.midY, width: 0, height: 0)
+        }
+        top.present(vc, animated: true)
+    }
+
     // MARK: - Init
 
     override init(frame: CGRect) {

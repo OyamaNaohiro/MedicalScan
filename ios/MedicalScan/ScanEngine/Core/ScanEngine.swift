@@ -190,6 +190,27 @@ final class ScanEngine: DepthFrameSourceDelegate {
         meshExtractor?.readBounds()
     }
 
+    /// 現在のメッシュを STL 化してドキュメントへ保存し、URL を返す（同期・要バックグラウンド）。
+    /// エクスポートパイプライン（後処理）はここに差し込む（Phase 7b）。
+    func exportSTL(binary: Bool, filename: String) -> URL? {
+        guard let extractor = meshExtractor else { return nil }
+        let positions = extractor.readbackPositions(context: context)
+        guard positions.count >= 3 else { return nil }
+
+        // [Phase 7b] ここで ExportMeshPipeline（Weld→Taubin→HoleFill→QEM→LOD）を適用する。
+        let data = STLExporter.data(positions: positions, binary: binary)
+
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let name = filename.hasSuffix(".stl") ? filename : "\(filename).stl"
+        let url = docs.appendingPathComponent(name)
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     /// ボリューム中心（ワールド）。軌道カメラの注視点。
     var volumeWorldCenter: SIMD3<Float>? {
         guard let tsdf, tsdf.isPositioned else { return nil }
