@@ -123,9 +123,10 @@ kernel void marchingCubesKernel(
 
         uint base = atomic_fetch_add_explicit(counter, 3u, memory_order_relaxed);
         if (base + 3 > u.maxVerts) return;
+        // 巻き順を反転（v0, v2, v1）して面法線を外向きにする（STL の表裏を正す）。
         outVerts[base]     = MCVertex{ float4(v0, 1.0), float4(n0, 0.0) };
-        outVerts[base + 1] = MCVertex{ float4(v1, 1.0), float4(n1, 0.0) };
-        outVerts[base + 2] = MCVertex{ float4(v2, 1.0), float4(n2, 0.0) };
+        outVerts[base + 1] = MCVertex{ float4(v2, 1.0), float4(n2, 0.0) };
+        outVerts[base + 2] = MCVertex{ float4(v1, 1.0), float4(n1, 0.0) };
 
         updateBounds(bounds, v0);
         updateBounds(bounds, v1);
