@@ -74,6 +74,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // Mesh 抽出（Phase 5）。Voxel 更新は知らない（読み取りのみ）。
     private var meshExtractor: MarchingCubesExtractor?
+    /// エクスポート時のメッシュ後処理（リアルタイムとは独立）。
+    let exportPipeline = ExportMeshPipeline()
     private var meshFrameCounter = 0
     private let meshExtractInterval = 15   // ~1秒ごと（深度~15fps想定）
 
@@ -137,6 +139,10 @@ final class ScanEngine: DepthFrameSourceDelegate {
         engine.tsdf = TSDFVolume(device: context.device,
                                  voxelSize: config.voxelSize, extent: config.volumeExtent)
         engine.meshExtractor = MarchingCubesExtractor(device: context.device)
+        // エクスポート後処理（保存時のみ。リアルタイムには影響しない）。
+        engine.exportPipeline.append(VertexWeld())        // 溶接でインデックス化
+        engine.exportPipeline.append(TaubinSmoothing())   // λ/μ 平滑化
+        // [Phase 7b-2] HoleFilling / QEMDecimation / LOD をここに追加
         return engine
     }
 
@@ -194,11 +200,16 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// エクスポートパイプライン（後処理）はここに差し込む（Phase 7b）。
     func exportSTL(binary: Bool, filename: String) -> URL? {
         guard let extractor = meshExtractor else { return nil }
-        let positions = extractor.readbackPositions(context: context)
-        guard positions.count >= 3 else { return nil }
+        let soup = extractor.readbackPositions(context: context)
+        guard soup.count >= 3 else { return nil }
 
-        // [Phase 7b] ここで ExportMeshPipeline（Weld→Taubin→HoleFill→QEM→LOD）を適用する。
-        let data = STLExporter.data(positions: positions, binary: binary)
+        // エクスポート後処理（Weld→Taubin→…）。soup を入力に走らせる。
+        let processed = exportPipeline.run(CPUMesh(positions: soup, normals: [], indices: []))
+        // インデックス付きなら三角形列へ展開、無ければ soup のまま。
+        let outPositions: [SIMD3<Float>] = processed.indices.isEmpty
+            ? processed.positions
+            : processed.indices.map { processed.positions[Int($0)] }
+        let data = STLExporter.data(positions: outPositions, binary: binary)
 
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let name = filename.hasSuffix(".stl") ? filename : "\(filename).stl"
