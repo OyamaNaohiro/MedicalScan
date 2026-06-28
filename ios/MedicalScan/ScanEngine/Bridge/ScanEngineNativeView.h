@@ -17,5 +17,6 @@
 @property (nonatomic) BOOL sdfSmooth;
 @property (nonatomic) NSInteger exportFormat;
 @property (nonatomic) double exportRequest;
+@property (nonatomic) double decimateRatio;
 
 @end

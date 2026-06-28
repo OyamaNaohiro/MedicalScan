@@ -76,6 +76,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private var meshExtractor: MarchingCubesExtractor?
     /// エクスポート時のメッシュ後処理（リアルタイムとは独立）。
     let exportPipeline = ExportMeshPipeline()
+    private let decimator = QEMDecimation()
+    /// エクスポート時の三角形削減率（1.0=無効=フル解像度, 0.5=半分 ...）。
+    var exportDecimateRatio: Float = 1.0
     private var meshFrameCounter = 0
     private let meshExtractInterval = 15   // ~1秒ごと（深度~15fps想定）
 
@@ -142,7 +145,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         // エクスポート後処理（保存時のみ。リアルタイムには影響しない）。
         engine.exportPipeline.append(VertexWeld())        // 溶接でインデックス化
         engine.exportPipeline.append(TaubinSmoothing())   // λ/μ 平滑化
-        // [Phase 7b-2] HoleFilling / QEMDecimation / LOD をここに追加
+        engine.exportPipeline.append(engine.decimator)    // QEM 削減（既定は無効）
+        // [Phase 7b-2+] HoleFilling / LOD をここに追加
         return engine
     }
 
@@ -203,7 +207,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         let soup = extractor.readbackPositions(context: context)
         guard soup.count >= 3 else { return nil }
 
-        // エクスポート後処理（Weld→Taubin→…）。soup を入力に走らせる。
+        // エクスポート後処理（Weld→Taubin→QEM）。削減率を反映してから走らせる。
+        decimator.targetRatio = exportDecimateRatio
         let processed = exportPipeline.run(CPUMesh(positions: soup, normals: [], indices: []))
         // インデックス付きなら三角形列へ展開、無ければ soup のまま。
         let outPositions: [SIMD3<Float>] = processed.indices.isEmpty

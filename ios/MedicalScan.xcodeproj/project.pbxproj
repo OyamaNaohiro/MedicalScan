@@ -49,6 +49,7 @@
 		AB000032B368108700A75B9A /* STLExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000033B368108700A75B9A /* STLExporter.swift */; };
 		AB000034B368108700A75B9A /* VertexWeld.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000035B368108700A75B9A /* VertexWeld.swift */; };
 		AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000037B368108700A75B9A /* TaubinSmoothing.swift */; };
+		AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000039B368108700A75B9A /* QEMDecimation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -105,6 +106,7 @@
 		AB000033B368108700A75B9A /* STLExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = STLExporter.swift; path = MedicalScan/ScanEngine/Export/STLExporter.swift; sourceTree = "<group>"; };
 		AB000035B368108700A75B9A /* VertexWeld.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VertexWeld.swift; path = MedicalScan/ScanEngine/Meshing/VertexWeld.swift; sourceTree = "<group>"; };
 		AB000037B368108700A75B9A /* TaubinSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaubinSmoothing.swift; path = MedicalScan/ScanEngine/Meshing/TaubinSmoothing.swift; sourceTree = "<group>"; };
+		AB000039B368108700A75B9A /* QEMDecimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QEMDecimation.swift; path = MedicalScan/ScanEngine/Meshing/QEMDecimation.swift; sourceTree = "<group>"; };
 		AB000019B368108700A75B9A /* ScanEngineNativeView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ScanEngineNativeView.h; path = MedicalScan/ScanEngine/Bridge/ScanEngineNativeView.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -169,6 +171,7 @@
 				AB000033B368108700A75B9A /* STLExporter.swift */,
 				AB000035B368108700A75B9A /* VertexWeld.swift */,
 				AB000037B368108700A75B9A /* TaubinSmoothing.swift */,
+				AB000039B368108700A75B9A /* QEMDecimation.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -409,6 +412,7 @@
 				AB000032B368108700A75B9A /* STLExporter.swift in Sources */,
 				AB000034B368108700A75B9A /* VertexWeld.swift in Sources */,
 				AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */,
+				AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,7 +425,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 65;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -452,7 +456,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 65;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

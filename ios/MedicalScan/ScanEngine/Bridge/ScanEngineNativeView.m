@@ -87,4 +87,9 @@
   [_impl setValue:@(exportRequest) forKey:@"exportRequest"];
 }
 
+- (void)setDecimateRatio:(double)decimateRatio {
+  _decimateRatio = decimateRatio;
+  [_impl setValue:@(decimateRatio) forKey:@"decimateRatio"];
+}
+
 @end

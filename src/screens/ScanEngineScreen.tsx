@@ -59,6 +59,7 @@ export default function ScanEngineScreen() {
   const [sdfSmooth, setSdfSmooth] = useState(true);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
+  const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -119,6 +120,7 @@ export default function ScanEngineScreen() {
         sdfSmooth={sdfSmooth}
         exportFormat={exportFormat}
         exportRequest={exportReq}
+        decimateRatio={decimate}
       />
 
       {/* デバッグ HUD */}
@@ -241,6 +243,26 @@ export default function ScanEngineScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* 削減率（QEM Decimation） */}
+      <View style={styles.filterRow}>
+        <FilterChip label="Full" on={decimate >= 0.999} onPress={() => setDecimate(1.0)} />
+        <FilterChip
+          label="1/2"
+          on={decimate > 0.4 && decimate < 0.6}
+          onPress={() => setDecimate(0.5)}
+        />
+        <FilterChip
+          label="1/4"
+          on={decimate > 0.2 && decimate < 0.3}
+          onPress={() => setDecimate(0.25)}
+        />
+        <FilterChip
+          label="1/10"
+          on={decimate < 0.15}
+          onPress={() => setDecimate(0.1)}
+        />
       </View>
 
       {/* STL 保存 */}

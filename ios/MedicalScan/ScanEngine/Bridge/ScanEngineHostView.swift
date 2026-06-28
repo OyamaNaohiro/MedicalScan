@@ -75,6 +75,10 @@ final class ScanEngineHostView: UIView {
 
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
+    /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。
+    @objc var decimateRatio: Double = 1.0 {
+        didSet { engine?.exportDecimateRatio = Float(decimateRatio) }
+    }
     /// 保存トリガー（タイムスタンプ。変化で保存実行）。
     @objc var exportRequest: Double = 0 {
         didSet {

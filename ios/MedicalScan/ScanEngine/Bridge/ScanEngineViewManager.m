@@ -30,5 +30,6 @@ RCT_EXPORT_VIEW_PROPERTY(meshView, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(sdfSmooth, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(exportFormat, NSInteger)
 RCT_EXPORT_VIEW_PROPERTY(exportRequest, double)
+RCT_EXPORT_VIEW_PROPERTY(decimateRatio, double)
 
 @end

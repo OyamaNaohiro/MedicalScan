@@ -23,6 +23,7 @@ interface ScanEnginePreviewProps {
   sdfSmooth?: boolean; // SDF平滑化 ON/OFF
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
+  decimateRatio?: number; // 1.0=フル 0.5=半分 0.25=1/4
 }
 
 const NativeScanEngineView =
@@ -48,6 +49,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   sdfSmooth = true,
   exportFormat = 0,
   exportRequest = 0,
+  decimateRatio = 1.0,
 }) => {
   if (!NativeScanEngineView) {
     return <View style={style} />;
@@ -67,6 +69,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       sdfSmooth={sdfSmooth}
       exportFormat={exportFormat}
       exportRequest={exportRequest}
+      decimateRatio={decimateRatio}
     />
   );
 };
