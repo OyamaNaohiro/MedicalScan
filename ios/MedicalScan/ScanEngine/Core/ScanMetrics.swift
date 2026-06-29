@@ -71,6 +71,7 @@ extension ScanTrackingState {
         switch self {
         case .normal: return "normal"
         case .limited: return "limited"
+        case .relocalizing: return "relocalizing"
         case .notAvailable: return "notAvailable"
         }
     }

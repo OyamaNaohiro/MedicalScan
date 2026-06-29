@@ -22,9 +22,11 @@ enum ScanSensor {
 
 // MARK: - トラッキング状態（ARCamera.trackingState を抽象化）
 
+// ARKit VIO の追従状態。normal 以外は姿勢が信頼できないため TSDF 統合を抑制する。
 enum ScanTrackingState: Equatable {
-    case normal
-    case limited       // 初期化中/急速移動/特徴不足など。統合は控える
+    case normal        // 安定。統合可
+    case limited       // 初期化中/急速移動/特徴不足など。統合抑制
+    case relocalizing  // 再ローカライズ中（中断復帰など）。統合停止
     case notAvailable  // 追従不可。統合停止
 }
 

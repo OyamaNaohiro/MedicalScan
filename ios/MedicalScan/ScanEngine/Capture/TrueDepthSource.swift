@@ -178,8 +178,10 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
     private static func map(_ s: ARCamera.TrackingState) -> ScanTrackingState {
         switch s {
         case .normal: return .normal
-        case .limited: return .limited
         case .notAvailable: return .notAvailable
+        case .limited(let reason):
+            // 再ローカライズ中は区別（中断復帰など）。他は limited。
+            return reason == .relocalizing ? .relocalizing : .limited
         }
     }
 }
