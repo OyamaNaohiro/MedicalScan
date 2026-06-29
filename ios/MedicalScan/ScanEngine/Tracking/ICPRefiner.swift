@@ -12,6 +12,17 @@
 import Metal
 import simd
 
+/// ICP の結果。pose は採用すべき姿勢、status で統合可否を判断する。
+struct ICPResult {
+    var pose: simd_float4x4
+    var rms: Float            // 残差 RMS [m]
+    var correspondences: Int
+    /// .aborted=モデル不足(VIO で統合/ブートストラップ), .ok=整合良好(pose で統合),
+    /// .poor=整合不良(統合スキップして既存メッシュを保護)
+    enum Status { case aborted, ok, poor }
+    var status: Status
+}
+
 final class ICPRefiner {
 
     private struct Uniforms {
@@ -35,20 +46,23 @@ final class ICPRefiner {
     private var partial: MTLBuffer?
     private var partialCapacity = 0
 
-    /// VIO 姿勢 `vioPose` を初期値に ICP で微調整した姿勢を返す。失敗時は vioPose。
+    /// VIO 姿勢 `vioPose` を初期値に ICP で微調整。結果（姿勢・残差・統合可否）を返す。
     func refine(depth: MTLTexture, mask: MTLTexture?, volume: TSDFVolume,
                 intrinsics: CameraIntrinsics, width: Int, height: Int,
-                vioPose: simd_float4x4, config: ScanConfig, context: MetalContext) -> simd_float4x4 {
+                vioPose: simd_float4x4, config: ScanConfig, context: MetalContext) -> ICPResult {
 
-        guard let pso = context.computePipelineState(named: "icpReduceKernel") else { return vioPose }
+        let abortResult = ICPResult(pose: vioPose, rms: 0, correspondences: 0, status: .aborted)
+        guard let pso = context.computePipelineState(named: "icpReduceKernel") else { return abortResult }
         let stride = max(2, config.icpStride)
         let gw = (width + stride - 1) / stride
         let gh = (height + stride - 1) / stride
         let needed = gw * gh * 29
-        guard ensurePartial(count: needed, device: context.device), let partial else { return vioPose }
+        guard ensurePartial(count: needed, device: context.device), let partial else { return abortResult }
 
         var T = vioPose
         var improved = false
+        var lastRms: Float = 0
+        var lastCount = 0
 
         for _ in 0..<max(1, config.icpIterations) {
             var u = Uniforms(
@@ -62,7 +76,9 @@ final class ICPRefiner {
             var hasMask: UInt32 = mask != nil ? 1 : 0
 
             guard let cb = context.commandQueue.makeCommandBuffer(),
-                  let enc = cb.makeComputeCommandEncoder() else { return improved ? T : vioPose }
+                  let enc = cb.makeComputeCommandEncoder() else {
+                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+            }
             enc.setComputePipelineState(pso)
             enc.setTexture(depth, index: 0)
             enc.setTexture(mask ?? depth, index: 1)
@@ -86,7 +102,11 @@ final class ICPRefiner {
                 for k in 0..<29 { acc[k] += Double(ptr[base + k]) }
             }
             let count = Int(acc[28])
-            if count < minCorrespondences { return improved ? T : vioPose }
+            lastCount = count
+            lastRms = count > 0 ? Float((acc[27] / Double(count)).squareRoot()) : 0
+            if count < minCorrespondences {
+                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+            }
 
             // 6x6 対称 A・b を構築。
             var A = [Double](repeating: 0, count: 36)
@@ -104,15 +124,24 @@ final class ICPRefiner {
             guard let xi = ICPRefiner.solve6x6(A, b) else { break }
             let omega = SIMD3<Float>(Float(xi[0]), Float(xi[1]), Float(xi[2]))
             let trans = SIMD3<Float>(Float(xi[3]), Float(xi[4]), Float(xi[5]))
-            if !omega.x.isFinite || !trans.x.isFinite { return improved ? T : vioPose }
+            if !omega.x.isFinite || !trans.x.isFinite {
+                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+            }
             if simd_length(omega) > maxRotation || simd_length(trans) > maxTranslation {
-                return improved ? T : vioPose   // 発散 → 安全側
+                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult  // 発散
             }
 
             T = ICPRefiner.orthonormalized(ICPRefiner.delta(omega: omega, trans: trans) * T)
             improved = true
         }
-        return improved ? T : vioPose
+        return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+    }
+
+    /// 残差 RMS が truncation 以下なら .ok（pose で統合）、超なら .poor（統合スキップ）。
+    private func makeResult(_ pose: simd_float4x4, _ rms: Float, _ corr: Int,
+                            _ config: ScanConfig) -> ICPResult {
+        let status: ICPResult.Status = rms <= config.truncation ? .ok : .poor
+        return ICPResult(pose: pose, rms: rms, correspondences: corr, status: status)
     }
 
     private func ensurePartial(count: Int, device: MTLDevice) -> Bool {

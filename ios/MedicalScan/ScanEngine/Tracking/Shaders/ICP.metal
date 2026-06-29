@@ -90,7 +90,7 @@ kernel void icpReduceKernel(
 
     float distN;
     if (!sampleDistance(voxels, f, u, distN)) return;
-    if (abs(distN) > 0.9) return;   // 表面から遠い→不確実
+    if (abs(distN) > 0.6) return;   // 表面近傍のみ採用（対応の質を上げる）
 
     // 勾配（中心差分・最近傍）＝法線方向。
     float gx = fetchVoxel(voxels, int(f.x) + 1, int(f.y), int(f.z), u).distance
@@ -105,17 +105,21 @@ kernel void icpReduceKernel(
     float3 nrm = grad / glen;
 
     float r = distN * u.truncation;             // 点→表面の符号付き距離[m]
+    // 外れ値の重み下げ（Geman-McClure 風）。残差が大きい対応ほど寄与を小さく。
+    float cc = max(1e-8, u.truncation * 0.4); cc = cc * cc;
+    float w = cc / (cc + r * r);
+
     // point-to-plane ヤコビアン J = [ p×n , n ]（6）。
     float3 pxn = cross(pw, nrm);
     float J[6] = { pxn.x, pxn.y, pxn.z, nrm.x, nrm.y, nrm.z };
 
-    // A 上三角(21) + b(6) + err(1) + count(1)。
+    // A 上三角(21) + b(6) + err(1) + count(1)。A,b は重み付き、err は重み無し(RMS 用)。
     uint o = outBase;
     for (int j = 0; j < 6; j++)
         for (int k = j; k < 6; k++)
-            partial[o++] = J[j] * J[k];
+            partial[o++] = w * J[j] * J[k];
     for (int j = 0; j < 6; j++)
-        partial[o++] = -J[j] * r;
+        partial[o++] = -w * J[j] * r;
     partial[o++] = r * r;
     partial[o++] = 1.0;
 }

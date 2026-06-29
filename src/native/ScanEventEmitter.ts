@@ -23,6 +23,9 @@ export type ScanEventPayload =
       tsdfMB: number;
       meshTriangles: number;
       mcGpuMs: number;
+      icpRmsMm: number;
+      icpCorr: number;
+      icpApplied: boolean;
     }
   | {type: 'engineState'; state: string; tracking?: string}
   | {type: 'engineError'; message: string}

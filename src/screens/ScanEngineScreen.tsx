@@ -20,6 +20,9 @@ interface Metrics {
   tsdfMB: number;
   meshTriangles: number;
   mcGpuMs: number;
+  icpRmsMm: number;
+  icpCorr: number;
+  icpApplied: boolean;
 }
 
 const EMPTY: Metrics = {
@@ -37,6 +40,9 @@ const EMPTY: Metrics = {
   tsdfMB: 0,
   meshTriangles: 0,
   mcGpuMs: 0,
+  icpRmsMm: 0,
+  icpCorr: 0,
+  icpApplied: false,
 };
 
 const MODES: {label: string; value: DepthDisplayMode}[] = [
@@ -93,6 +99,9 @@ export default function ScanEngineScreen() {
           tsdfMB: event.tsdfMB,
           meshTriangles: event.meshTriangles,
           mcGpuMs: event.mcGpuMs,
+          icpRmsMm: event.icpRmsMm,
+          icpCorr: event.icpCorr,
+          icpApplied: event.icpApplied,
         });
       } else if (event.type === 'engineLog') {
         setLastEvent(`${event.kind}: ${event.message}`);
@@ -161,6 +170,11 @@ export default function ScanEngineScreen() {
         <View style={styles.hudDivider} />
         <HudRow label="Triangles" value={metrics.meshTriangles.toLocaleString()} />
         <HudRow label="MC GPU" value={`${metrics.mcGpuMs.toFixed(2)} ms`} />
+        <HudRow
+          label="ICP RMS"
+          value={`${metrics.icpRmsMm.toFixed(1)} mm ${metrics.icpApplied ? '✓' : '✗'}`}
+        />
+        <HudRow label="ICP Corr" value={metrics.icpCorr.toLocaleString()} />
         {lastEvent !== '' && <Text style={styles.hudEvent}>{lastEvent}</Text>}
       </View>
 

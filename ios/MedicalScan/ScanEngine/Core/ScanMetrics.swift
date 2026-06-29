@@ -43,6 +43,11 @@ struct ScanMetrics {
     var meshTriangles: Int = 0
     var mcGpuMs: Double = 0
 
+    // ICP Refinement
+    var icpRmsMm: Double = 0
+    var icpCorr: Int = 0
+    var icpApplied: Bool = false
+
     /// ScanEventEmitter で RN へ送るための辞書表現（軽量・数値のみ）。
     var dictionary: [String: Any] {
         [
@@ -62,6 +67,9 @@ struct ScanMetrics {
             "tsdfMB": tsdfMB,
             "meshTriangles": meshTriangles,
             "mcGpuMs": mcGpuMs,
+            "icpRmsMm": icpRmsMm,
+            "icpCorr": icpCorr,
+            "icpApplied": icpApplied,
         ]
     }
 }

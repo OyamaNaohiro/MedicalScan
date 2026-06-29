@@ -31,6 +31,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var onTSDFStats: ((TSDFStats) -> Void)?
     /// Mesh 抽出の計測値。メインで呼ぶ。
     var onMeshStats: ((MeshStats) -> Void)?
+    /// ICP の残差[m]・対応点数・統合適用フラグ。メインで呼ぶ。
+    var onICPStats: ((_ rms: Float, _ correspondences: Int, _ applied: Bool) -> Void)?
 
     /// 状態はキャプチャキューとメインスレッドの双方から更新され得るため、ロックで保護する
     /// （Thread Sanitizer 対策）。読み取りは公開、更新は `setState` 経由（private）に限定する。
@@ -265,16 +267,25 @@ final class ScanEngine: DepthFrameSourceDelegate {
                               distance: (config.depthMin + config.depthMax) * 0.5)
             }
 
-            // ICP Refinement: VIO 姿勢を初期値にドリフトを微調整（配置済み＝モデルがある場合のみ）。
+            // ICP Refinement: VIO 姿勢を初期値にドリフトを微調整。整合不良フレームは統合しない。
             var integrateFrame = filtered
+            var doIntegrate = true
             if icpEnabled, tsdf.isPositioned {
-                integrateFrame.cameraToWorld = icpRefiner.refine(
+                let r = icpRefiner.refine(
                     depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
                     intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
                     vioPose: filtered.cameraToWorld, config: config, context: context)
+                switch r.status {
+                case .aborted, .ok: integrateFrame.cameraToWorld = r.pose
+                case .poor: doIntegrate = false   // 既存メッシュを崩さないよう統合スキップ
+                }
+                let applied = doIntegrate
+                DispatchQueue.main.async { [weak self] in
+                    self?.onICPStats?(r.rms, r.correspondences, applied)
+                }
             }
 
-            if let cb = context.commandQueue.makeCommandBuffer() {
+            if doIntegrate, let cb = context.commandQueue.makeCommandBuffer() {
                 integrator.integrate(integrateFrame, volume: tsdf, config: config,
                                      commandBuffer: cb, context: context)
                 cb.addCompletedHandler { [weak self, weak tsdf] buffer in
@@ -291,9 +302,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
                 cb.commit()
             }
 
-            // Mesh 抽出（重いのでスロットル。Voxel 更新後に読むので順序は queue が保証）。
-            meshFrameCounter += 1
-            if let extractor = meshExtractor, tsdf.isPositioned,
+            // Mesh 抽出（統合したフレームのみ・スロットル。Voxel 更新後に読むので順序は queue が保証）。
+            if doIntegrate { meshFrameCounter += 1 }
+            if doIntegrate, let extractor = meshExtractor, tsdf.isPositioned,
                meshFrameCounter % meshExtractInterval == 0,
                let cb = context.commandQueue.makeCommandBuffer() {
                 // SDF 平滑化（ON のとき）→ その結果から MC。OFF はマスターから直接。

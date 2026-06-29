@@ -235,6 +235,14 @@ final class ScanEngineHostView: UIView {
             self.metrics.mcGpuMs = stats.gpuMs
         }
 
+        // ICP 計測
+        engine.onICPStats = { [weak self] rms, corr, applied in
+            guard let self else { return }
+            self.metrics.icpRmsMm = Double(rms) * 1000.0
+            self.metrics.icpCorr = corr
+            self.metrics.icpApplied = applied
+        }
+
         // イベントログ
         engine.onEvent = { [weak self] kind, message in
             _ = self
