@@ -82,6 +82,11 @@
   [_impl setValue:@(icpEnabled) forKey:@"icpEnabled"];
 }
 
+- (void)setConnectGate:(BOOL)connectGate {
+  _connectGate = connectGate;
+  [_impl setValue:@(connectGate) forKey:@"connectGate"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];

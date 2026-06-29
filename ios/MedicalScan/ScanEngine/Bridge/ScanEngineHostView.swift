@@ -73,9 +73,14 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.sdfSmoothEnabled = sdfSmooth }
     }
 
-    /// ICP Refinement の ON/OFF（VIO ドリフト微調整）。
+    /// ICP 姿勢補正の ON/OFF（VIO ドリフト微調整・任意）。
     @objc var icpEnabled: Bool = false {
         didSet { engine?.icpEnabled = icpEnabled }
+    }
+
+    /// 整合ゲートの ON/OFF（既存メッシュと一致するフレームだけ統合）。
+    @objc var connectGate: Bool = true {
+        didSet { engine?.connectGate = connectGate }
     }
 
     /// STL 形式。0:binary 1:ascii。

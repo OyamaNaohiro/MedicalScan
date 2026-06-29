@@ -21,7 +21,8 @@ interface ScanEnginePreviewProps {
   tsdfSlice?: number; // 0..1
   meshView?: boolean; // 3Dメッシュ表示
   sdfSmooth?: boolean; // SDF平滑化 ON/OFF
-  icpEnabled?: boolean; // ICP Refinement ON/OFF
+  icpEnabled?: boolean; // ICP 姿勢補正 ON/OFF
+  connectGate?: boolean; // 整合ゲート ON/OFF
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
   decimateRatio?: number; // 1.0=フル 0.5=半分 0.25=1/4
@@ -49,6 +50,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   meshView = false,
   sdfSmooth = true,
   icpEnabled = false,
+  connectGate = true,
   exportFormat = 0,
   exportRequest = 0,
   decimateRatio = 1.0,
@@ -70,6 +72,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       meshView={meshView}
       sdfSmooth={sdfSmooth}
       icpEnabled={icpEnabled}
+      connectGate={connectGate}
       exportFormat={exportFormat}
       exportRequest={exportRequest}
       decimateRatio={decimateRatio}

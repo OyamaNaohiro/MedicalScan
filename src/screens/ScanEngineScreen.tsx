@@ -64,6 +64,7 @@ export default function ScanEngineScreen() {
   const [meshView, setMeshView] = useState(false);
   const [sdfSmooth, setSdfSmooth] = useState(true);
   const [icpEnabled, setIcpEnabled] = useState(false);
+  const [connectGate, setConnectGate] = useState(true);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
   const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25
@@ -129,6 +130,7 @@ export default function ScanEngineScreen() {
         meshView={meshView}
         sdfSmooth={sdfSmooth}
         icpEnabled={icpEnabled}
+        connectGate={connectGate}
         exportFormat={exportFormat}
         exportRequest={exportReq}
         decimateRatio={decimate}
@@ -191,6 +193,7 @@ export default function ScanEngineScreen() {
         <FilterChip label="Temp" on={temporalOn} onPress={() => setTemporalOn(p => !p)} />
         <FilterChip label="Mesh3D" on={meshView} onPress={() => setMeshView(p => !p)} />
         <FilterChip label="Smooth" on={sdfSmooth} onPress={() => setSdfSmooth(p => !p)} />
+        <FilterChip label="Gate" on={connectGate} onPress={() => setConnectGate(p => !p)} />
         <FilterChip label="ICP" on={icpEnabled} onPress={() => setIcpEnabled(p => !p)} />
       </View>
 

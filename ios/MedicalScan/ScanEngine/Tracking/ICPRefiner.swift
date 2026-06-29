@@ -56,7 +56,7 @@ final class ICPRefiner {
         let stride = max(2, config.icpStride)
         let gw = (width + stride - 1) / stride
         let gh = (height + stride - 1) / stride
-        let needed = gw * gh * 29
+        let needed = gw * gh * 30
         guard ensurePartial(count: needed, device: context.device), let partial else { return abortResult }
 
         var T = vioPose
@@ -93,13 +93,13 @@ final class ICPRefiner {
             cb.commit()
             cb.waitUntilCompleted()
 
-            // 総和（A 上三角21, b 6, err 1, count 1）。
+            // 総和（A 上三角21, b 6, err 1, agree 1, observed 1）。
             let ptr = partial.contents().bindMemory(to: Float.self, capacity: needed)
-            var acc = [Double](repeating: 0, count: 29)
+            var acc = [Double](repeating: 0, count: 30)
             let entries = gw * gh
             for i in 0..<entries {
-                let base = i * 29
-                for k in 0..<29 { acc[k] += Double(ptr[base + k]) }
+                let base = i * 30
+                for k in 0..<30 { acc[k] += Double(ptr[base + k]) }
             }
             let count = Int(acc[28])
             lastCount = count
@@ -142,6 +142,60 @@ final class ICPRefiner {
                             _ config: ScanConfig) -> ICPResult {
         let status: ICPResult.Status = rms <= config.truncation ? .ok : .poor
         return ICPResult(pose: pose, rms: rms, correspondences: corr, status: status)
+    }
+
+    /// 姿勢は動かさず、与えた pose での既存モデルとの整合度のみ評価する（整合ゲート用）。
+    /// 返り値: agree=表面近傍に乗った点数, observed=既存モデルと重なった点数, rms=一致点の残差[m]。
+    func evaluate(depth: MTLTexture, mask: MTLTexture?, volume: TSDFVolume,
+                  intrinsics: CameraIntrinsics, width: Int, height: Int,
+                  pose: simd_float4x4, config: ScanConfig, context: MetalContext)
+        -> (rms: Float, agree: Int, observed: Int) {
+
+        guard let pso = context.computePipelineState(named: "icpReduceKernel") else { return (0, 0, 0) }
+        let stride = max(2, config.icpStride)
+        let gw = (width + stride - 1) / stride
+        let gh = (height + stride - 1) / stride
+        let needed = gw * gh * 30
+        guard ensurePartial(count: needed, device: context.device), let partial else { return (0, 0, 0) }
+
+        var u = Uniforms(
+            cameraToWorld: pose,
+            fx: intrinsics.fx, fy: intrinsics.fy, cx: intrinsics.cx, cy: intrinsics.cy,
+            depthW: UInt32(width), depthH: UInt32(height), stride: UInt32(stride),
+            dimX: volume.dims.x, dimY: volume.dims.y, dimZ: volume.dims.z,
+            ox: volume.origin.x, oy: volume.origin.y, oz: volume.origin.z,
+            voxelSize: volume.voxelSize, truncation: config.truncation,
+            minWeight: config.icpMinWeight, depthMin: config.depthMin, depthMax: config.depthMax)
+        var hasMask: UInt32 = mask != nil ? 1 : 0
+
+        guard let cb = context.commandQueue.makeCommandBuffer(),
+              let enc = cb.makeComputeCommandEncoder() else { return (0, 0, 0) }
+        enc.setComputePipelineState(pso)
+        enc.setTexture(depth, index: 0)
+        enc.setTexture(mask ?? depth, index: 1)
+        enc.setBuffer(volume.voxelBuffer, offset: 0, index: 0)
+        enc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
+        enc.setBuffer(partial, offset: 0, index: 2)
+        enc.setBytes(&hasMask, length: MemoryLayout<UInt32>.stride, index: 3)
+        let tg = MTLSize(width: 8, height: 8, depth: 1)
+        let groups = MTLSize(width: (gw + 7) / 8, height: (gh + 7) / 8, depth: 1)
+        enc.dispatchThreadgroups(groups, threadsPerThreadgroup: tg)
+        enc.endEncoding()
+        cb.commit()
+        cb.waitUntilCompleted()
+
+        let ptr = partial.contents().bindMemory(to: Float.self, capacity: needed)
+        var sumErr = 0.0, sumAgree = 0.0, sumObs = 0.0
+        let entries = gw * gh
+        for i in 0..<entries {
+            let base = i * 30
+            sumErr += Double(ptr[base + 27])
+            sumAgree += Double(ptr[base + 28])
+            sumObs += Double(ptr[base + 29])
+        }
+        let agree = Int(sumAgree), observed = Int(sumObs)
+        let rms = agree > 0 ? Float((sumErr / Double(agree)).squareRoot()) : 999
+        return (rms, agree, observed)
     }
 
     private func ensurePartial(count: Int, device: MTLDevice) -> Bool {

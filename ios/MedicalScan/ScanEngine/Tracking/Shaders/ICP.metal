@@ -65,8 +65,9 @@ kernel void icpReduceKernel(
     uint gw = (u.depthW + u.stride - 1) / u.stride;
     uint gh = (u.depthH + u.stride - 1) / u.stride;
     if (gid.x >= gw || gid.y >= gh) return;
-    uint outBase = (gid.y * gw + gid.x) * 29u;
-    for (uint k = 0; k < 29; k++) partial[outBase + k] = 0.0;
+    // 30値: A上三角(21) + b(6) + err(1) + agree(1) + observed(1)
+    uint outBase = (gid.y * gw + gid.x) * 30u;
+    for (uint k = 0; k < 30; k++) partial[outBase + k] = 0.0;
 
     uint px = gid.x * u.stride, py = gid.y * u.stride;
     if (px >= u.depthW || py >= u.depthH) return;
@@ -89,8 +90,9 @@ kernel void icpReduceKernel(
         f.x > float(u.dimX - 2) || f.y > float(u.dimY - 2) || f.z > float(u.dimZ - 2)) return;
 
     float distN;
-    if (!sampleDistance(voxels, f, u, distN)) return;
-    if (abs(distN) > 0.6) return;   // 表面近傍のみ採用（対応の質を上げる）
+    if (!sampleDistance(voxels, f, u, distN)) return;   // 非観測領域→重なり無し（寄与なし）
+    partial[outBase + 29] = 1.0;                        // observed（既存モデルと重なる点）
+    if (abs(distN) > 0.6) return;   // 観測済だが表面から遠い＝不一致（agree でない）
 
     // 勾配（中心差分・最近傍）＝法線方向。
     float gx = fetchVoxel(voxels, int(f.x) + 1, int(f.y), int(f.z), u).distance

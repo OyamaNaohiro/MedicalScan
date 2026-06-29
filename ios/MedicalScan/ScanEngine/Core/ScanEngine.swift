@@ -86,8 +86,10 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // ICP Refinement（VIO 初期値の微調整。frame-to-model）。
     private let icpRefiner = ICPRefiner()
-    /// ICP Refinement の ON/OFF（既定 OFF。VIO 単独と比較できる）。
+    /// ICP 姿勢補正の ON/OFF（既定 OFF。誤りやすいので任意）。
     var icpEnabled = false
+    /// 整合ゲートの ON/OFF（既定 ON。既存メッシュと一致するフレームだけ統合）。
+    var connectGate = true
 
     // SDF 平滑化（Phase 6, ボリューム空間）。マスターは破壊しない。
     private let smoother = TSDFSmoother()
@@ -267,21 +269,35 @@ final class ScanEngine: DepthFrameSourceDelegate {
                               distance: (config.depthMin + config.depthMax) * 0.5)
             }
 
-            // ICP Refinement: VIO 姿勢を初期値にドリフトを微調整。整合不良フレームは統合しない。
             var integrateFrame = filtered
             var doIntegrate = true
-            if icpEnabled, tsdf.isPositioned {
+
+            // 整合ゲート（姿勢は動かさない）: 既存モデルと重なる点が一致しないフレームは統合しない。
+            // 重なりが少ない＝未観測の新領域なので統合（拡張）を許可する。
+            if connectGate, tsdf.isPositioned {
+                let ev = icpRefiner.evaluate(
+                    depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
+                    intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
+                    pose: filtered.cameraToWorld, config: config, context: context)
+                if ev.observed >= config.gateMinOverlap {
+                    let ratio = Float(ev.agree) / Float(ev.observed)
+                    doIntegrate = ratio >= config.gateAgreeRatio
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onICPStats?(ev.rms, ev.agree, doIntegrate)
+                    }
+                }
+            }
+
+            // 任意: ICP 姿勢補正（既定 OFF）。ゲート通過時のみ。
+            if doIntegrate, icpEnabled, tsdf.isPositioned {
                 let r = icpRefiner.refine(
                     depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
                     intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
                     vioPose: filtered.cameraToWorld, config: config, context: context)
                 switch r.status {
-                case .aborted, .ok: integrateFrame.cameraToWorld = r.pose
-                case .poor: doIntegrate = false   // 既存メッシュを崩さないよう統合スキップ
-                }
-                let applied = doIntegrate
-                DispatchQueue.main.async { [weak self] in
-                    self?.onICPStats?(r.rms, r.correspondences, applied)
+                case .ok: integrateFrame.cameraToWorld = r.pose
+                case .poor: doIntegrate = false
+                case .aborted: break
                 }
             }
 
