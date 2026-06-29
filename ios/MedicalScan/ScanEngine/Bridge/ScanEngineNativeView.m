@@ -77,6 +77,11 @@
   [_impl setValue:@(sdfSmooth) forKey:@"sdfSmooth"];
 }
 
+- (void)setIcpEnabled:(BOOL)icpEnabled {
+  _icpEnabled = icpEnabled;
+  [_impl setValue:@(icpEnabled) forKey:@"icpEnabled"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];

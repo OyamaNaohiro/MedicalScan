@@ -73,6 +73,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.sdfSmoothEnabled = sdfSmooth }
     }
 
+    /// ICP Refinement の ON/OFF（VIO ドリフト微調整）。
+    @objc var icpEnabled: Bool = false {
+        didSet { engine?.icpEnabled = icpEnabled }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。

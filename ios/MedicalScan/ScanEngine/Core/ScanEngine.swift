@@ -82,6 +82,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
     private var meshFrameCounter = 0
     private let meshExtractInterval = 15   // ~1秒ごと（深度~15fps想定）
 
+    // ICP Refinement（VIO 初期値の微調整。frame-to-model）。
+    private let icpRefiner = ICPRefiner()
+    /// ICP Refinement の ON/OFF（既定 OFF。VIO 単独と比較できる）。
+    var icpEnabled = false
+
     // SDF 平滑化（Phase 6, ボリューム空間）。マスターは破壊しない。
     private let smoother = TSDFSmoother()
     /// SDF 平滑化の ON/OFF（A/B 比較用）。
@@ -259,8 +264,18 @@ final class ScanEngine: DepthFrameSourceDelegate {
                 tsdf.position(frontOf: frame.cameraToWorld,
                               distance: (config.depthMin + config.depthMax) * 0.5)
             }
+
+            // ICP Refinement: VIO 姿勢を初期値にドリフトを微調整（配置済み＝モデルがある場合のみ）。
+            var integrateFrame = filtered
+            if icpEnabled, tsdf.isPositioned {
+                integrateFrame.cameraToWorld = icpRefiner.refine(
+                    depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
+                    intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
+                    vioPose: filtered.cameraToWorld, config: config, context: context)
+            }
+
             if let cb = context.commandQueue.makeCommandBuffer() {
-                integrator.integrate(filtered, volume: tsdf, config: config,
+                integrator.integrate(integrateFrame, volume: tsdf, config: config,
                                      commandBuffer: cb, context: context)
                 cb.addCompletedHandler { [weak self, weak tsdf] buffer in
                     guard let tsdf else { return }

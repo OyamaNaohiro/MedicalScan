@@ -77,8 +77,8 @@ struct DepthFrame {
 
     /// 深度解像度に整合した内部パラメータ。
     let intrinsics: CameraIntrinsics
-    /// カメラ→ワールド変換（姿勢）。TSDF はこの逆行列でワールド点をカメラ系へ落とす。
-    let cameraToWorld: simd_float4x4
+    /// カメラ→ワールド変換（姿勢）。既定は VIO 由来。ICP Refinement で差し替えられるよう var。
+    var cameraToWorld: simd_float4x4
 
     let width: Int
     let height: Int
@@ -123,6 +123,11 @@ struct ScanConfig {
 
     // Mesh 抽出（MC）
     var meshMinWeight: Float = 3          // この重み未満のボクセルは表面化しない（ノイズ抑制と成長のバランス）
+
+    // ICP Refinement（VIO 初期値の微調整。frame-to-model）
+    var icpIterations: Int = 3
+    var icpStride: Int = 8                // 深度の間引き（点数削減）
+    var icpMinWeight: Float = 2           // モデル(TSDF)として信頼する最小重み
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）
