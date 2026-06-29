@@ -360,9 +360,11 @@ const styles = StyleSheet.create({
   hudDivider: {height: 1, backgroundColor: '#444', marginVertical: 4},
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 8,
     paddingTop: 10,
+    paddingHorizontal: 8,
     backgroundColor: 'rgba(0,0,0,0.85)',
   },
   filterChip: {
