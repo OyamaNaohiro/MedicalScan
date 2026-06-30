@@ -274,15 +274,17 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
             var integrateFrame = filtered
             var doIntegrate = true
+            var vioRms: Float = .infinity   // VIO 姿勢での整合残差（ICP 改善判定の基準）
 
-            // 整合ゲート（姿勢は動かさない）: 既存モデルと重なる点が一致しないフレームは統合しない。
+            // 整合ゲート（姿勢は動かさない）＆ ICP 用の基準残差を取得。
             // 重なりが少ない＝未観測の新領域なので統合（拡張）を許可する。
-            if connectGate, tsdf.isPositioned {
+            if tsdf.isPositioned, (connectGate || icpEnabled) {
                 let ev = icpRefiner.evaluate(
                     depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
                     intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
                     pose: filtered.cameraToWorld, config: config, context: context)
-                if ev.observed >= config.gateMinOverlap {
+                vioRms = ev.rms
+                if connectGate, ev.observed >= config.gateMinOverlap {
                     let ratio = Float(ev.agree) / Float(ev.observed)
                     doIntegrate = ratio >= config.gateAgreeRatio
                     DispatchQueue.main.async { [weak self] in
@@ -291,16 +293,15 @@ final class ScanEngine: DepthFrameSourceDelegate {
                 }
             }
 
-            // 任意: ICP 姿勢補正（既定 OFF）。ゲート通過時のみ。
+            // ICP 姿勢補正（任意）: VIO より整合が良くなる時だけ採用＝戻り観測を既存表面へスナップ。
+            // 悪化させないので二重壁を増やさない（完全なループ閉じ込みではないが実用的に寄せる）。
             if doIntegrate, icpEnabled, tsdf.isPositioned {
                 let r = icpRefiner.refine(
                     depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
                     intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
                     vioPose: filtered.cameraToWorld, config: config, context: context)
-                switch r.status {
-                case .ok: integrateFrame.cameraToWorld = r.pose
-                case .poor: doIntegrate = false
-                case .aborted: break
+                if r.status == .ok, r.rms < vioRms {
+                    integrateFrame.cameraToWorld = r.pose
                 }
             }
 
