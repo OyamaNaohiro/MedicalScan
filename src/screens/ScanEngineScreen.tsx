@@ -65,6 +65,7 @@ export default function ScanEngineScreen() {
   const [sdfSmooth, setSdfSmooth] = useState(true);
   const [icpEnabled, setIcpEnabled] = useState(false);
   const [connectGate, setConnectGate] = useState(true);
+  const [sparseEnabled, setSparseEnabled] = useState(false);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
   const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25
@@ -131,6 +132,7 @@ export default function ScanEngineScreen() {
         sdfSmooth={sdfSmooth}
         icpEnabled={icpEnabled}
         connectGate={connectGate}
+        sparseEnabled={sparseEnabled}
         exportFormat={exportFormat}
         exportRequest={exportReq}
         decimateRatio={decimate}
@@ -195,6 +197,7 @@ export default function ScanEngineScreen() {
         <FilterChip label="Smooth" on={sdfSmooth} onPress={() => setSdfSmooth(p => !p)} />
         <FilterChip label="Gate" on={connectGate} onPress={() => setConnectGate(p => !p)} />
         <FilterChip label="ICP" on={icpEnabled} onPress={() => setIcpEnabled(p => !p)} />
+        <FilterChip label="Sparse" on={sparseEnabled} onPress={() => setSparseEnabled(p => !p)} />
       </View>
 
       {/* TSDF スライス表示 */}

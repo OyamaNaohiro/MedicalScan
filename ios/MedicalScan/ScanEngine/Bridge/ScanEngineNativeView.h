@@ -17,6 +17,7 @@
 @property (nonatomic) BOOL sdfSmooth;
 @property (nonatomic) BOOL icpEnabled;
 @property (nonatomic) BOOL connectGate;
+@property (nonatomic) BOOL sparseEnabled;
 @property (nonatomic) NSInteger exportFormat;
 @property (nonatomic) double exportRequest;
 @property (nonatomic) double decimateRatio;

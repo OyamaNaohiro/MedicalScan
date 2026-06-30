@@ -52,6 +52,8 @@
 		AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000039B368108700A75B9A /* QEMDecimation.swift */; };
 		AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00003BB368108700A75B9A /* ICPRefiner.swift */; };
 		AB00003CB368108700A75B9A /* ICP.metal in Sources */ = {isa = PBXBuildFile; fileRef = AB00003DB368108700A75B9A /* ICP.metal */; };
+		AB00003EB368108700A75B9A /* SparseTSDFIntegrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00003FB368108700A75B9A /* SparseTSDFIntegrator.swift */; };
+		AB000040B368108700A75B9A /* SparseTSDF.metal in Sources */ = {isa = PBXBuildFile; fileRef = AB000041B368108700A75B9A /* SparseTSDF.metal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -111,6 +113,8 @@
 		AB000039B368108700A75B9A /* QEMDecimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QEMDecimation.swift; path = MedicalScan/ScanEngine/Meshing/QEMDecimation.swift; sourceTree = "<group>"; };
 		AB00003BB368108700A75B9A /* ICPRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ICPRefiner.swift; path = MedicalScan/ScanEngine/Tracking/ICPRefiner.swift; sourceTree = "<group>"; };
 		AB00003DB368108700A75B9A /* ICP.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = ICP.metal; path = MedicalScan/ScanEngine/Tracking/Shaders/ICP.metal; sourceTree = "<group>"; };
+		AB00003FB368108700A75B9A /* SparseTSDFIntegrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SparseTSDFIntegrator.swift; path = MedicalScan/ScanEngine/Fusion/SparseTSDFIntegrator.swift; sourceTree = "<group>"; };
+		AB000041B368108700A75B9A /* SparseTSDF.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = SparseTSDF.metal; path = MedicalScan/ScanEngine/Fusion/Shaders/SparseTSDF.metal; sourceTree = "<group>"; };
 		AB000019B368108700A75B9A /* ScanEngineNativeView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ScanEngineNativeView.h; path = MedicalScan/ScanEngine/Bridge/ScanEngineNativeView.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -178,6 +182,8 @@
 				AB000039B368108700A75B9A /* QEMDecimation.swift */,
 				AB00003BB368108700A75B9A /* ICPRefiner.swift */,
 				AB00003DB368108700A75B9A /* ICP.metal */,
+				AB00003FB368108700A75B9A /* SparseTSDFIntegrator.swift */,
+				AB000041B368108700A75B9A /* SparseTSDF.metal */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -421,6 +427,8 @@
 				AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */,
 				AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */,
 				AB00003CB368108700A75B9A /* ICP.metal in Sources */,
+				AB00003EB368108700A75B9A /* SparseTSDFIntegrator.swift in Sources */,
+				AB000040B368108700A75B9A /* SparseTSDF.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -433,7 +441,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 71;
+				CURRENT_PROJECT_VERSION = 72;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -464,7 +472,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 71;
+				CURRENT_PROJECT_VERSION = 72;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

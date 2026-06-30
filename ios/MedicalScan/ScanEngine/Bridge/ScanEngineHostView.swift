@@ -83,6 +83,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.connectGate = connectGate }
     }
 
+    /// ブロックスパース統合の ON/OFF（高速化）。
+    @objc var sparseEnabled: Bool = false {
+        didSet { engine?.sparseEnabled = sparseEnabled }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。

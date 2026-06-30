@@ -71,6 +71,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // TSDF（Phase 4）。Mesh は知らない（Phase 5 で別コンポーネント）。
     private let integrator = TSDFIntegrator()
+    private let sparseIntegrator = SparseTSDFIntegrator()
+    /// ブロックスパース統合（Phase 8）。既定 OFF（密版フォールバック維持）。
+    var sparseEnabled = false
     private let sliceRenderer = TSDFSliceRenderer()
     private var tsdf: TSDFVolume?
 
@@ -302,8 +305,13 @@ final class ScanEngine: DepthFrameSourceDelegate {
             }
 
             if doIntegrate, let cb = context.commandQueue.makeCommandBuffer() {
-                integrator.integrate(integrateFrame, volume: tsdf, config: config,
-                                     commandBuffer: cb, context: context)
+                if sparseEnabled {
+                    sparseIntegrator.integrate(integrateFrame, volume: tsdf, config: config,
+                                               commandBuffer: cb, context: context)
+                } else {
+                    integrator.integrate(integrateFrame, volume: tsdf, config: config,
+                                         commandBuffer: cb, context: context)
+                }
                 cb.addCompletedHandler { [weak self, weak tsdf] buffer in
                     guard let tsdf else { return }
                     let (updated, active) = tsdf.readCounters()

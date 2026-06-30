@@ -87,6 +87,11 @@
   [_impl setValue:@(connectGate) forKey:@"connectGate"];
 }
 
+- (void)setSparseEnabled:(BOOL)sparseEnabled {
+  _sparseEnabled = sparseEnabled;
+  [_impl setValue:@(sparseEnabled) forKey:@"sparseEnabled"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];

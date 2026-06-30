@@ -32,6 +32,15 @@ final class TSDFVolume {
     /// [0]=updated(毎フレーム), [1]=activeTotal（CPU が metrics 用に読む, shared）。
     let countersBuffer: MTLBuffer
 
+    // --- Sparse 統合用（ブロックスパース） ---
+    static let blockEdge = 8
+    let blocksDim: SIMD3<Int32>           // 各軸のブロック数
+    var blockCount: Int { Int(blocksDim.x) * Int(blocksDim.y) * Int(blocksDim.z) }
+    let blockFlags: MTLBuffer             // uint × blockCount（private）
+    let activeBlockList: MTLBuffer        // uint × blockCount（private）
+    let activeCountBuffer: MTLBuffer      // uint ×1（shared）
+    let indirectArgsBuffer: MTLBuffer     // MTLDispatchThreadgroupsIndirectArguments（private）
+
     var voxelCount: Int { Int(dims.x) * Int(dims.y) * Int(dims.z) }
     var byteCount: Int { voxelCount * Self.voxelStride }
 
@@ -47,17 +56,31 @@ final class TSDFVolume {
         let count = dx * dy * dz
         guard count <= maxVoxels else { return nil }
 
+        let be = Self.blockEdge
+        let bx = (dx + be - 1) / be, by = (dy + be - 1) / be, bz = (dz + be - 1) / be
+        let blockN = bx * by * bz
+
         guard let vb = device.makeBuffer(length: count * Self.voxelStride,
                                          options: .storageModePrivate),
-              let cb = device.makeBuffer(length: 16, options: .storageModeShared) else {
+              let cb = device.makeBuffer(length: 16, options: .storageModeShared),
+              let bf = device.makeBuffer(length: blockN * 4, options: .storageModePrivate),
+              let al = device.makeBuffer(length: blockN * 4, options: .storageModePrivate),
+              let ac = device.makeBuffer(length: 4, options: .storageModeShared),
+              let ia = device.makeBuffer(length: 16, options: .storageModePrivate) else {
             return nil
         }
         self.dims = SIMD3(Int32(dx), Int32(dy), Int32(dz))
+        self.blocksDim = SIMD3(Int32(bx), Int32(by), Int32(bz))
         self.voxelSize = voxelSize
         self.voxelBuffer = vb
         self.countersBuffer = cb
+        self.blockFlags = bf
+        self.activeBlockList = al
+        self.activeCountBuffer = ac
+        self.indirectArgsBuffer = ia
         vb.label = "TSDF.voxels"
         cb.label = "TSDF.counters"
+        bf.label = "TSDF.blockFlags"
     }
 
     /// カメラ前方にボリュームを配置する（スキャン中は固定）。
