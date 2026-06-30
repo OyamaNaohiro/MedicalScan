@@ -102,10 +102,10 @@ kernel void sparseIntegrateKernel(
         device const uint*             activeList [[buffer(3)]],
         texture2d<float, access::read> depthTex [[texture(0)]],
         texture2d<float, access::read> maskTex  [[texture(1)]],
-        uint  blockSlot [[threadgroup_position_in_grid]],
-        uint3 lid       [[thread_position_in_threadgroup]]) {
+        uint3 blockTG [[threadgroup_position_in_grid]],
+        uint3 lid     [[thread_position_in_threadgroup]]) {
 
-    uint blockId = activeList[blockSlot];
+    uint blockId = activeList[blockTG.x];
     int bx = int(blockId % uint(u.bX));
     int by = int((blockId / uint(u.bX)) % uint(u.bY));
     int bz = int(blockId / (uint(u.bX) * uint(u.bY)));
