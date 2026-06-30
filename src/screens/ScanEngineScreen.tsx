@@ -65,7 +65,7 @@ export default function ScanEngineScreen() {
   const [sdfSmooth, setSdfSmooth] = useState(true);
   const [icpEnabled, setIcpEnabled] = useState(false);
   const [connectGate, setConnectGate] = useState(true);
-  const [sparseEnabled, setSparseEnabled] = useState(false);
+  const [sparseEnabled, setSparseEnabled] = useState(true);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
   const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25

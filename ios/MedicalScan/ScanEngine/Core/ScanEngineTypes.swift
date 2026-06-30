@@ -130,8 +130,8 @@ struct ScanConfig {
     var icpMinWeight: Float = 2           // モデル(TSDF)として信頼する最小重み
 
     // 整合ゲート（姿勢は動かさず、既存メッシュと一致するフレームだけ統合）
-    var gateMinOverlap: Int = 300         // 既存モデルとの重なり点がこれ未満なら新領域とみなし統合
-    var gateAgreeRatio: Float = 0.6       // 重なり点のうち表面に一致する最低割合（厳しめ）
+    var gateMinOverlap: Int = 250         // 既存モデルとの重なり点がこれ未満なら新領域とみなし統合
+    var gateAgreeRatio: Float = 0.7       // 重なり点のうち表面に一致する最低割合（厳しめ）
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）

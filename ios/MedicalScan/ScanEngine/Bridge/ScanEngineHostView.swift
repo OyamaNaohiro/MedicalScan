@@ -83,8 +83,8 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.connectGate = connectGate }
     }
 
-    /// ブロックスパース統合の ON/OFF（高速化）。
-    @objc var sparseEnabled: Bool = false {
+    /// ブロックスパース統合の ON/OFF（高速化）。検証済みのため既定 ON。
+    @objc var sparseEnabled: Bool = true {
         didSet { engine?.sparseEnabled = sparseEnabled }
     }
 

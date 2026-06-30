@@ -72,8 +72,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
     // TSDF（Phase 4）。Mesh は知らない（Phase 5 で別コンポーネント）。
     private let integrator = TSDFIntegrator()
     private let sparseIntegrator = SparseTSDFIntegrator()
-    /// ブロックスパース統合（Phase 8）。既定 OFF（密版フォールバック維持）。
-    var sparseEnabled = false
+    /// ブロックスパース統合（Phase 8）。検証済みのため既定 ON（密版は toggle でフォールバック可）。
+    var sparseEnabled = true
     private let sliceRenderer = TSDFSliceRenderer()
     private var tsdf: TSDFVolume?
 
