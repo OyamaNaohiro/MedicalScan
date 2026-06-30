@@ -60,10 +60,11 @@ kernel void markBlocksKernel(
     if (vx < 0 || vx >= u.dimX || vy < 0 || vy >= u.dimY || vz < 0 || vz >= u.dimZ) return;
 
     int bx = vx / kBlock, by = vy / kBlock, bz = vz / kBlock;
-    const int3 offs[7] = { int3(0,0,0), int3(1,0,0), int3(-1,0,0),
-                           int3(0,1,0), int3(0,-1,0), int3(0,0,1), int3(0,0,-1) };
-    for (int k = 0; k < 7; k++) {
-        int nx = bx + offs[k].x, ny = by + offs[k].y, nz = bz + offs[k].z;
+    // 3x3x3 の全 1 リングをマーク（truncation 帯が斜めのブロックへ及ぶ取りこぼしを防ぐ）。
+    for (int dz = -1; dz <= 1; dz++)
+    for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++) {
+        int nx = bx + dx, ny = by + dy, nz = bz + dz;
         if (nx < 0 || nx >= u.bX || ny < 0 || ny >= u.bY || nz < 0 || nz >= u.bZ) continue;
         blockFlags[(uint(nz) * uint(u.bY) + uint(ny)) * uint(u.bX) + uint(nx)] = 1;
     }

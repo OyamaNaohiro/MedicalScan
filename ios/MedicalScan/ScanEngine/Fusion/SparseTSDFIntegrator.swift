@@ -30,7 +30,7 @@ final class SparseTSDFIntegrator {
         var hasMask: UInt32
     }
 
-    private let markStride: UInt32 = 2
+    private let markStride: UInt32 = 1   // 全画素でマーク（被覆漏れ防止）
 
     func integrate(_ frame: DepthFrame, volume: TSDFVolume, config: ScanConfig,
                    commandBuffer cb: MTLCommandBuffer, context: MetalContext) {
