@@ -35,6 +35,9 @@ final class ConfidenceFilter: DepthFilter {
 
     init(config: ScanConfig) { self.config = config }
 
+    /// モード切替で depthMin/Max 等が変わったら反映する。
+    func updateConfig(_ config: ScanConfig) { self.config = config }
+
     func encode(_ frame: DepthFrame,
                 commandBuffer: MTLCommandBuffer,
                 context: MetalContext) -> DepthFrame {

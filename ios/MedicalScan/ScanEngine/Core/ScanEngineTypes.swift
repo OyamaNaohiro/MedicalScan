@@ -20,6 +20,52 @@ enum ScanSensor {
     case recorded    // 録画済みフレームの再生（オフライン検証用）
 }
 
+// MARK: - スキャンモード（対象サイズ別プリセット）
+
+/// 対象サイズに合わせて voxelSize / volumeExtent / 深度レンジを一括で切り替えるプリセット。
+///
+/// 核心は voxelSize（解像度）。対象が小さいほど箱を縮めて voxelSize を細かくでき、
+/// 同じメモリ/計算量のまま線解像度が上がる（＝細部精度が上がる）。
+/// TrueDepth の近距離ノイズ床は概ね 0.5〜1mm なので、手モードの 1.5mm 未満は頭打ちになる。
+///
+/// rawValue は React（scanMode prop）と一致させる。
+enum ScanMode: Int {
+    case hand = 0        // 手・小物   ~30cm   voxel 1.5mm
+    case foot = 1        // 足・部位   ~50cm   voxel 2.0mm
+    case upperBody = 2   // 上半身     ~1m     voxel 3.0mm（従来既定）
+
+    /// このモードに対応する ScanConfig を返す（サイズ非依存パラメータは既定を継承）。
+    func makeConfig() -> ScanConfig {
+        var c = ScanConfig()
+        switch self {
+        case .hand:
+            c.voxelSize = 0.0015                 // 1.5mm（センサー限界付近・細部重視）
+            c.volumeExtent = [0.3, 0.3, 0.3]     // 200^3 ≈ 800万ボクセル
+            c.depthMin = 0.15
+            c.depthMax = 0.45
+        case .foot:
+            c.voxelSize = 0.002                  // 2.0mm
+            c.volumeExtent = [0.5, 0.5, 0.5]     // 250^3 ≈ 1560万ボクセル
+            c.depthMin = 0.20
+            c.depthMax = 0.60
+        case .upperBody:
+            c.voxelSize = 0.003                  // 3.0mm（従来値）
+            c.volumeExtent = [0.6, 1.2, 0.6]
+            c.depthMin = 0.20
+            c.depthMax = 0.90
+        }
+        return c
+    }
+
+    var label: String {
+        switch self {
+        case .hand: return "手・小物"
+        case .foot: return "足・部位"
+        case .upperBody: return "上半身"
+        }
+    }
+}
+
 // MARK: - トラッキング状態（ARCamera.trackingState を抽象化）
 
 // ARKit VIO の追従状態。normal 以外は姿勢が信頼できないため TSDF 統合を抑制する。

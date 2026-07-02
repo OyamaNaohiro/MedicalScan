@@ -56,6 +56,14 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.filterChain.setEnabled(temporalEnabled, for: "Temporal") }
     }
 
+    /// スキャン対象モード。0:手・小物 1:足・部位 2:上半身。開始前に適用（実行中は無視）。
+    @objc var scanMode: Int = ScanMode.upperBody.rawValue {
+        didSet {
+            let mode = ScanMode(rawValue: scanMode) ?? .upperBody
+            engine?.applyMode(mode)
+        }
+    }
+
     /// TSDF スライス表示。0:off(深度) 1:distance 2:weight 3:occupancy。
     @objc var tsdfDisplay: Int = 0
     /// スライス軸。0:XY 1:XZ 2:YZ。

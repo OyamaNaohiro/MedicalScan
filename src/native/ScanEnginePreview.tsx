@@ -9,10 +9,18 @@ export enum DepthDisplayMode {
   Difference = 3,
 }
 
+// スキャン対象モード（ネイティブ ScanMode と一致）。
+export enum ScanMode {
+  Hand = 0, // 手・小物 ~30cm / voxel 1.5mm
+  Foot = 1, // 足・部位 ~50cm / voxel 2.0mm
+  UpperBody = 2, // 上半身 ~1m / voxel 3.0mm
+}
+
 interface ScanEnginePreviewProps {
   style?: ViewStyle;
   isScanning?: boolean;
   displayMode?: DepthDisplayMode;
+  scanMode?: ScanMode; // 対象サイズ別プリセット（開始前に設定）
   confidenceEnabled?: boolean;
   bilateralEnabled?: boolean;
   temporalEnabled?: boolean;
@@ -42,6 +50,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   style,
   isScanning = false,
   displayMode = DepthDisplayMode.Filtered,
+  scanMode = ScanMode.UpperBody,
   confidenceEnabled = true,
   bilateralEnabled = true,
   temporalEnabled = true,
@@ -65,6 +74,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       style={style}
       isScanning={isScanning}
       displayMode={displayMode}
+      scanMode={scanMode}
       confidenceEnabled={confidenceEnabled}
       bilateralEnabled={bilateralEnabled}
       temporalEnabled={temporalEnabled}

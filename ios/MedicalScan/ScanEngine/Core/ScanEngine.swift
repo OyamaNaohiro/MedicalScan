@@ -102,6 +102,9 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// 現在の追従状態（capture キューで更新）。normal のときだけ配置・統合する。
     private var currentTracking: ScanTrackingState = .notAvailable
 
+    /// 現在のスキャンモード（対象サイズ別プリセット）。既定は上半身（従来値）。
+    private(set) var scanMode: ScanMode = .upperBody
+
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
 
@@ -186,6 +189,28 @@ final class ScanEngine: DepthFrameSourceDelegate {
     func reset() {
         filterChain.reset()
         // tsdf?.clear()
+    }
+
+    /// スキャン対象モード（手/足/上半身）を適用する。
+    /// voxelSize・volumeExtent・深度レンジを一括で切り替え、TSDF ボリュームを新解像度で作り直す。
+    /// ボリューム再確保はスキャン中に行うと危険なので、実行中は無視する（RN 側でも開始中は非活性）。
+    func applyMode(_ mode: ScanMode) {
+        if case .running = state { return }   // 実行中は切替不可（停止してから）
+        guard mode != scanMode || tsdf == nil else { return }
+
+        scanMode = mode
+        let newConfig = mode.makeConfig()
+        config = newConfig
+        // 深度レンジ変更を ConfidenceFilter（有効マスク生成）へ反映。
+        filterChain.updateConfig(newConfig)
+        // TSDF ボリュームを新しい voxelSize/extent で作り直す。
+        // 失敗（メモリ上限超過）時は従来ボリュームを維持する。
+        if let volume = TSDFVolume(device: context.device,
+                                   voxelSize: newConfig.voxelSize, extent: newConfig.volumeExtent) {
+            tsdf = volume
+        }
+        let voxelMm = String(format: "%.1f", newConfig.voxelSize * 1000)
+        onEvent?("mode", "モード: \(mode.label)（voxel \(voxelMm)mm）")
     }
 
     /// TSDF 断面を描画してテクスチャを返す（デバッグ表示用。Mesh は作らない）。

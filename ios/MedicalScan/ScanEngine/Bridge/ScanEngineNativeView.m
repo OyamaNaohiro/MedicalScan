@@ -37,6 +37,11 @@
   [_impl setValue:@(displayMode) forKey:@"displayMode"];
 }
 
+- (void)setScanMode:(NSInteger)scanMode {
+  _scanMode = scanMode;
+  [_impl setValue:@(scanMode) forKey:@"scanMode"];
+}
+
 - (void)setConfidenceEnabled:(BOOL)confidenceEnabled {
   _confidenceEnabled = confidenceEnabled;
   [_impl setValue:@(confidenceEnabled) forKey:@"confidenceEnabled"];

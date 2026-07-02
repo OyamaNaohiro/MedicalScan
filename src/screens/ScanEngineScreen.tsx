@@ -2,7 +2,7 @@ import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
-import {ScanEnginePreview, DepthDisplayMode} from '../native/ScanEnginePreview';
+import {ScanEnginePreview, DepthDisplayMode, ScanMode} from '../native/ScanEnginePreview';
 import {addScanEventListener} from '../native/ScanEventEmitter';
 
 interface Metrics {
@@ -52,9 +52,17 @@ const MODES: {label: string; value: DepthDisplayMode}[] = [
   {label: 'Diff', value: DepthDisplayMode.Difference},
 ];
 
+// 対象サイズ別スキャンモード（開始前に選択。voxel解像度・箱・深度レンジが切り替わる）。
+const SCAN_MODES: {label: string; sub: string; value: ScanMode}[] = [
+  {label: '手・小物', sub: '30cm / 1.5mm', value: ScanMode.Hand},
+  {label: '足・部位', sub: '50cm / 2.0mm', value: ScanMode.Foot},
+  {label: '上半身', sub: '1m / 3.0mm', value: ScanMode.UpperBody},
+];
+
 export default function ScanEngineScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [mode, setMode] = useState<DepthDisplayMode>(DepthDisplayMode.Filtered);
+  const [scanMode, setScanMode] = useState<ScanMode>(ScanMode.UpperBody);
   const [confidenceOn, setConfidenceOn] = useState(true);
   const [bilateralOn, setBilateralOn] = useState(true);
   const [temporalOn, setTemporalOn] = useState(true);
@@ -122,6 +130,7 @@ export default function ScanEngineScreen() {
         style={styles.preview}
         isScanning={isScanning}
         displayMode={mode}
+        scanMode={scanMode}
         confidenceEnabled={confidenceOn}
         bilateralEnabled={bilateralOn}
         temporalEnabled={temporalOn}
@@ -187,6 +196,31 @@ export default function ScanEngineScreen() {
           <Text style={styles.errorText}>{engineError}</Text>
         </View>
       )}
+
+      {/* 対象モード（サイズ別プリセット。スキャン中は変更不可） */}
+      <View style={styles.scanModeRow}>
+        {SCAN_MODES.map(m => {
+          const active = scanMode === m.value;
+          return (
+            <TouchableOpacity
+              key={m.value}
+              disabled={isScanning}
+              style={[
+                styles.scanModeButton,
+                active && styles.scanModeButtonActive,
+                isScanning && styles.scanModeButtonDisabled,
+              ]}
+              onPress={() => setScanMode(m.value)}>
+              <Text style={[styles.scanModeText, active && styles.scanModeTextActive]}>
+                {m.label}
+              </Text>
+              <Text style={[styles.scanModeSub, active && styles.scanModeTextActive]}>
+                {m.sub}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* フィルタ ON/OFF + メッシュ3D表示 */}
       <View style={styles.filterRow}>
@@ -414,6 +448,28 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   errorText: {color: '#fff', fontSize: 12},
+  scanModeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 10,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+  },
+  scanModeButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#555',
+    backgroundColor: '#1c1c1e',
+  },
+  scanModeButtonActive: {backgroundColor: '#5e5ce6', borderColor: '#5e5ce6'},
+  scanModeButtonDisabled: {opacity: 0.4},
+  scanModeText: {color: '#ddd', fontSize: 14, fontWeight: '700'},
+  scanModeSub: {color: '#999', fontSize: 10, marginTop: 2},
+  scanModeTextActive: {color: '#fff'},
   modeRow: {
     flexDirection: 'row',
     justifyContent: 'center',

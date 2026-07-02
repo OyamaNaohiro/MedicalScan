@@ -31,10 +31,15 @@ protocol DepthFilter: AnyObject {
 
     /// 内部状態（履歴等）を破棄する。状態を持たないフィルタは既定の空実装でよい。
     func reset()
+
+    /// スキャンモード変更等で ScanConfig が差し替わったときに反映する。
+    /// しきい値を持たないフィルタは既定の空実装でよい。
+    func updateConfig(_ config: ScanConfig)
 }
 
 extension DepthFilter {
     func reset() {}
+    func updateConfig(_ config: ScanConfig) {}
 }
 
 /// フィルタを優先度順に適用するパイプライン。
@@ -62,6 +67,9 @@ final class DepthFilterChain {
 
     /// 全フィルタの内部状態を破棄（スキャン開始/リセット時に呼ぶ）。
     func reset() { filters.forEach { $0.reset() } }
+
+    /// 全フィルタへ新しい ScanConfig を反映（モード切替時に呼ぶ）。
+    func updateConfig(_ config: ScanConfig) { filters.forEach { $0.updateConfig(config) } }
 
     var isEmpty: Bool { filters.isEmpty }
 

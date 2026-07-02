@@ -7,6 +7,7 @@
 
 @property (nonatomic) BOOL isScanning;
 @property (nonatomic) NSInteger displayMode;
+@property (nonatomic) NSInteger scanMode;
 @property (nonatomic) BOOL confidenceEnabled;
 @property (nonatomic) BOOL bilateralEnabled;
 @property (nonatomic) BOOL temporalEnabled;
