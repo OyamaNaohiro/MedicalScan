@@ -194,8 +194,8 @@ export default function ScanSessionScreen() {
             <TouchableOpacity
               style={[styles.sideButton, view3D && styles.sideButtonActive]}
               onPress={() => setView3D(p => !p)}>
-              <Text style={styles.sideButtonText}>{view3D ? '3D' : '深度'}</Text>
-              <Text style={styles.sideButtonSub}>表示</Text>
+              <Text style={styles.sideButtonText}>{view3D ? 'AR' : '深度'}</Text>
+              <Text style={styles.sideButtonSub}>{view3D ? '重ね' : '表示'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

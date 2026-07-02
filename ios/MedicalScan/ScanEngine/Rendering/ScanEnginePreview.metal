@@ -49,6 +49,36 @@ fragment float4 meshFragment(MeshVOut in [[stage_in]]) {
     return float4(float3(0.70, 0.76, 0.85) * diff, 1.0);
 }
 
+// MARK: - カメラ映像（AR オーバーレイ背景）
+
+/// YCbCr(420, biplanar) → BGRA 変換（BT.601 full-range）。Y は全解像度・CbCr は半解像度。
+kernel void ycbcrToBGRA(texture2d<float, access::read>  yTex    [[texture(0)]],
+                        texture2d<float, access::read>  cbcrTex [[texture(1)]],
+                        texture2d<float, access::write> outTex  [[texture(2)]],
+                        uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= outTex.get_width() || gid.y >= outTex.get_height()) { return; }
+    float  y    = yTex.read(gid).r;
+    float2 cbcr = cbcrTex.read(gid / 2).rg - float2(0.5, 0.5);
+    float3 rgb;
+    rgb.r = y + 1.402   * cbcr.y;
+    rgb.g = y - 0.344136 * cbcr.x - 0.714136 * cbcr.y;
+    rgb.b = y + 1.772   * cbcr.x;
+    outTex.write(float4(clamp(rgb, 0.0, 1.0), 1.0), gid);
+}
+
+struct CameraBGUniforms {
+    float3x3 uvTransform;   // displayTransform の逆（view uv → image uv）
+};
+
+/// カメラ映像をフルスクリーン背景として表示（displayTransform で向き・アスペクトを補正）。
+fragment float4 cameraBGFragment(VertexOut in [[stage_in]],
+                                 texture2d<float, access::sample> colorTex [[texture(0)]],
+                                 constant CameraBGUniforms& u [[buffer(0)]]) {
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    float3 t = u.uvTransform * float3(in.uv, 1.0);
+    return float4(colorTex.sample(s, t.xy).rgb, 1.0);
+}
+
 // TSDF スライス（BGRA8）をそのまま表示するフラグメント。
 fragment float4 tsdfSlicePreviewFragment(VertexOut in [[stage_in]],
                                          texture2d<float, access::sample> tex [[texture(0)]]) {

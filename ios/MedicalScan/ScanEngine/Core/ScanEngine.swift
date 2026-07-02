@@ -85,7 +85,19 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// エクスポート時の三角形削減率（1.0=無効=フル解像度, 0.5=半分 ...）。
     var exportDecimateRatio: Float = 1.0
     private var meshFrameCounter = 0
-    private let meshExtractInterval = 15   // ~1秒ごと（深度~15fps想定）
+    /// メッシュ抽出間隔（フレーム数）。ライブ表示中は頻度を上げて成長を滑らかに見せる。
+    private var meshExtractInterval: Int { liveMode ? 5 : 15 }
+    /// ライブ表示モード（AR オーバーレイ/3D表示中）。カラー取得と高頻度メッシュを有効化。
+    var liveMode = false {
+        didSet {
+            guard liveMode != oldValue else { return }
+            source.setColorCapture(liveMode)
+        }
+    }
+    /// 表示ビューのサイズ[pt]（ARKit 投影/表示変換に使用）。
+    var previewViewport: CGSize = .zero {
+        didSet { source.setViewport(previewViewport) }
+    }
 
     // ICP Refinement（VIO 初期値の微調整。frame-to-model）。
     private let icpRefiner = ICPRefiner()

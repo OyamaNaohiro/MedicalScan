@@ -24,6 +24,11 @@ final class ScanEnginePreviewView: MTKView {
         var hasMask: UInt32
     }
 
+    /// metal の CameraBGUniforms とレイアウト一致（float3x3）。
+    private struct CameraBGUniforms {
+        var uvTransform: simd_float3x3
+    }
+
     // MARK: - 公開設定
 
     var displayMode: DepthDisplayMode = .filtered
@@ -42,7 +47,9 @@ final class ScanEnginePreviewView: MTKView {
     private var pipeline: MTLRenderPipelineState?
     private var slicePipeline: MTLRenderPipelineState?
     private var meshPipeline: MTLRenderPipelineState?
+    private var cameraBGPipeline: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
+    private var bgDepthState: MTLDepthStencilState?
     private var rawDepth: MTLTexture?
     private var filteredDepth: MTLTexture?
     private var validMask: MTLTexture?
@@ -58,6 +65,14 @@ final class ScanEnginePreviewView: MTKView {
     private var cameraToWorld: simd_float4x4?
     /// true でメッシュを「撮影中カメラの視点」から描画（自動回転→カメラ位置リンク）。
     var followCamera = false
+
+    // AR オーバーレイ（カメラ映像へメッシュを重ねるライブ表示）。
+    private var colorTexture: MTLTexture?
+    private var camView: simd_float4x4?
+    private var camProj: simd_float4x4?
+    private var camUVTransform = matrix_identity_float3x3
+    /// true でメッシュ表示時にカメラ映像を背景に描画し、実カメラ行列でメッシュを重ねる。
+    var arOverlay = false
     /// true で 3D メッシュ表示（連続描画して自動回転）。
     var meshEnabled = false {
         didSet {
@@ -119,10 +134,26 @@ final class ScanEnginePreviewView: MTKView {
             mdesc.depthAttachmentPixelFormat = depthStencilPixelFormat
             meshPipeline = try? context.device.makeRenderPipelineState(descriptor: mdesc)
         }
+        // カメラ映像背景（AR オーバーレイ）パイプライン。フルスクリーン頂点 + YCbCr変換済みBGRA表示。
+        if let cbgFn = library.makeFunction(name: "cameraBGFragment") {
+            let cdesc = MTLRenderPipelineDescriptor()
+            cdesc.vertexFunction = vfn
+            cdesc.fragmentFunction = cbgFn
+            cdesc.colorAttachments[0].pixelFormat = colorPixelFormat
+            cdesc.depthAttachmentPixelFormat = depthStencilPixelFormat
+            cameraBGPipeline = try? context.device.makeRenderPipelineState(descriptor: cdesc)
+        }
+
         let dsd = MTLDepthStencilDescriptor()
         dsd.depthCompareFunction = .less
         dsd.isDepthWriteEnabled = true
         depthState = context.device.makeDepthStencilState(descriptor: dsd)
+
+        // 背景は深度を書かない（メッシュを常に前面に）。
+        let bgdsd = MTLDepthStencilDescriptor()
+        bgdsd.depthCompareFunction = .always
+        bgdsd.isDepthWriteEnabled = false
+        bgDepthState = context.device.makeDepthStencilState(descriptor: bgdsd)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -161,6 +192,15 @@ final class ScanEnginePreviewView: MTKView {
     /// 撮影中カメラの姿勢を更新（カメラ位置リンク表示用）。
     func updateCameraPose(_ pose: simd_float4x4) {
         self.cameraToWorld = pose
+    }
+
+    /// AR オーバーレイ用のカメラ映像・行列を更新（取得できたフレームのみ）。
+    func updateCamera(color: MTLTexture?, view: simd_float4x4?,
+                      projection: simd_float4x4?, uvTransform: simd_float3x3?) {
+        self.colorTexture = color
+        self.camView = view
+        self.camProj = projection
+        if let uvTransform { self.camUVTransform = uvTransform }
     }
 
     /// メッシュ描画の MVP を作る。
@@ -226,9 +266,25 @@ extension ScanEnginePreviewView: MTKViewDelegate {
         }
 
         if meshEnabled, let meshPipeline, let meshBuffer, meshCount > 0 {
-            // Mesh 3D 表示（軌道カメラ + 深度テスト）。
+            // AR オーバーレイ ON: まずカメラ映像を背景に描画（深度は書かない）。
+            if arOverlay, let cameraBGPipeline, let colorTexture {
+                var bgU = CameraBGUniforms(uvTransform: camUVTransform)
+                encoder.setRenderPipelineState(cameraBGPipeline)
+                if let bgDepthState { encoder.setDepthStencilState(bgDepthState) }
+                encoder.setFragmentTexture(colorTexture, index: 0)
+                encoder.setFragmentBytes(&bgU, length: MemoryLayout<CameraBGUniforms>.stride, index: 0)
+                encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            }
+
+            // メッシュ描画（深度テスト付き）。
+            // AR オーバーレイ時は実カメラ行列で映像に重ね、それ以外は軌道/カメラ位置リンク。
             let aspect = Float(max(1, drawableSize.width) / max(1, drawableSize.height))
-            var mvp = meshMVP(aspect: aspect)
+            var mvp: simd_float4x4
+            if arOverlay, let camProj, let camView {
+                mvp = camProj * camView
+            } else {
+                mvp = meshMVP(aspect: aspect)
+            }
             encoder.setRenderPipelineState(meshPipeline)
             if let depthState { encoder.setDepthStencilState(depthState) }
             encoder.setCullMode(.none)   // vertex soup は向き不定

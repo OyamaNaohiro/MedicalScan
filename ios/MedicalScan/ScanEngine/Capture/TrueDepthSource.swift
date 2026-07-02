@@ -16,6 +16,7 @@
 import ARKit
 import AVFoundation
 import Metal
+import UIKit
 import simd
 
 final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
@@ -27,6 +28,11 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
     private let session = ARSession()
     private let queue = DispatchQueue(label: "scanengine.truedepth.capture", qos: .userInitiated)
     private var lastTracking: ScanTrackingState?
+
+    // AR オーバーレイ（カメラ映像へメッシュを重ねる）用。ON のときだけカラーと行列を取得する。
+    private var wantsColor = false
+    /// 表示ビューのサイズ[pt]（ARKit の投影/表示変換に使う）。既定は縦長端末の目安。
+    private var viewportSize = CGSize(width: 390, height: 844)
 
     // 深度ロスト検知用。
     private var lastDepthTime: TimeInterval = 0
@@ -65,6 +71,13 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
 
     func stop() {
         session.pause()
+    }
+
+    func setColorCapture(_ enabled: Bool) { wantsColor = enabled }
+
+    func setViewport(_ size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        viewportSize = size
     }
 
     // MARK: - ARSessionDelegate
@@ -127,16 +140,31 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
         @unknown default: quality = 0.6
         }
 
-        let outFrame = DepthFrame(
+        var outFrame = DepthFrame(
             depth: depthTex,
             confidence: nil,                    // TrueDepth は per-pixel confidence 非提供
-            color: nil,                         // Phase 2 ではカラー未取得
+            color: nil,                         // AR オーバーレイ ON のとき下で設定
             intrinsics: intrinsics,
             cameraToWorld: frame.camera.transform,
             width: w, height: h,
             quality: quality,
             timestamp: frame.timestamp,
             sensor: .trueDepth)
+
+        // AR オーバーレイ用にカラー映像と表示行列を取得（ON のときだけ・負荷を避ける）。
+        if wantsColor {
+            let orient: UIInterfaceOrientation = .portrait
+            let vp = viewportSize
+            outFrame.color = makeColorTexture(from: frame.capturedImage)
+            outFrame.cameraView = frame.camera.viewMatrix(for: orient)
+            outFrame.cameraProjection = frame.camera.projectionMatrix(
+                for: orient, viewportSize: vp, zNear: 0.01, zFar: 10)
+            let dt = frame.displayTransform(for: orient, viewportSize: vp).inverted()
+            outFrame.displayTransformInv = simd_float3x3(
+                SIMD3<Float>(Float(dt.a), Float(dt.b), 0),
+                SIMD3<Float>(Float(dt.c), Float(dt.d), 0),
+                SIMD3<Float>(Float(dt.tx), Float(dt.ty), 1))
+        }
 
         delegate?.depthFrameSource(self, didOutput: outFrame)
     }
@@ -173,6 +201,53 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
         tex.replace(region: MTLRegionMake2D(0, 0, w, h),
                     mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
         return tex
+    }
+
+    /// カメラ映像（420 YCbCr biplanar）を独立した BGRA MTLTexture へ GPU 変換する。
+    /// 入力 CVPixelBuffer は ARFrame 寿命に縛られるため、CVMetalTexture を GPU 完了まで retain し、
+    /// 出力は所有テクスチャに切り離す（同一 command queue 順序でプレビュー描画前に完了が保証される）。
+    private func makeColorTexture(from pb: CVPixelBuffer) -> MTLTexture? {
+        let w = CVPixelBufferGetWidth(pb)
+        let h = CVPixelBufferGetHeight(pb)
+        guard CVPixelBufferGetPlaneCount(pb) >= 2,
+              let (yTex, yHold) = cvTexture(pb, plane: 0, format: .r8Unorm),
+              let (cbcrTex, cbcrHold) = cvTexture(pb, plane: 1, format: .rg8Unorm),
+              let pso = context.computePipelineState(named: "ycbcrToBGRA") else { return nil }
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+        desc.usage = [.shaderRead, .shaderWrite]
+        desc.storageMode = .private
+        guard let out = context.device.makeTexture(descriptor: desc),
+              let cb = context.commandQueue.makeCommandBuffer(),
+              let enc = cb.makeComputeCommandEncoder() else { return nil }
+
+        enc.setComputePipelineState(pso)
+        enc.setTexture(yTex, index: 0)
+        enc.setTexture(cbcrTex, index: 1)
+        enc.setTexture(out, index: 2)
+        let (groups, tpg) = context.threadgroup2D(for: pso, width: w, height: h)
+        enc.dispatchThreadgroups(groups, threadsPerThreadgroup: tpg)
+        enc.endEncoding()
+        // 入力 CVMetalTexture を GPU 完了まで生かす（use-after-free 回避）。
+        cb.addCompletedHandler { _ in _ = (yHold, cbcrHold) }
+        cb.commit()
+        return out
+    }
+
+    /// CVPixelBuffer の 1 プレーンを CVMetalTextureCache 経由でゼロコピー texture 化する。
+    /// 戻り値の CVMetalTexture は GPU 完了まで保持する必要がある（呼び出し側で retain）。
+    private func cvTexture(_ pb: CVPixelBuffer, plane: Int,
+                          format: MTLPixelFormat) -> (MTLTexture, CVMetalTexture)? {
+        let w = CVPixelBufferGetWidthOfPlane(pb, plane)
+        let h = CVPixelBufferGetHeightOfPlane(pb, plane)
+        var cvTexOut: CVMetalTexture?
+        let status = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault, context.textureCache, pb, nil,
+            format, w, h, plane, &cvTexOut)
+        guard status == kCVReturnSuccess, let cvTex = cvTexOut,
+              let tex = CVMetalTextureGetTexture(cvTex) else { return nil }
+        return (tex, cvTex)
     }
 
     private static func map(_ s: ARCamera.TrackingState) -> ScanTrackingState {

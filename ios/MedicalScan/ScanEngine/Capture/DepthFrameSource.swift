@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 /// 深度フレームの供給元。
 protocol DepthFrameSource: AnyObject {
@@ -22,6 +23,17 @@ protocol DepthFrameSource: AnyObject {
 
     /// キャプチャ停止。
     func stop()
+
+    /// カラー（AR オーバーレイ）取得の ON/OFF。対応しないソースは無視でよい。
+    func setColorCapture(_ enabled: Bool)
+
+    /// 表示ビューのサイズ[pt]（ARKit の投影/表示変換に使用）。非対応ソースは無視でよい。
+    func setViewport(_ size: CGSize)
+}
+
+extension DepthFrameSource {
+    func setColorCapture(_ enabled: Bool) {}
+    func setViewport(_ size: CGSize) {}
 }
 
 /// DepthFrameSource からの通知。すべて 1 つの直列キュー上で呼ばれることを保証する実装にする。

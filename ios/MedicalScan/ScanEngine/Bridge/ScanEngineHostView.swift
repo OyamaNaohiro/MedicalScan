@@ -77,8 +77,13 @@ final class ScanEngineHostView: UIView {
     }
 
     /// メッシュを撮影中カメラの視点から見る（カメラ位置リンク）。UX 画面で ON。
+    /// ON のときはカメラ映像を背景に重ねる AR オーバーレイ＋高頻度メッシュも有効化する。
     @objc var cameraFollow: Bool = false {
-        didSet { preview?.followCamera = cameraFollow }
+        didSet {
+            preview?.followCamera = cameraFollow
+            preview?.arOverlay = cameraFollow
+            engine?.liveMode = cameraFollow
+        }
     }
 
     /// SDF 平滑化（ボリューム空間）の ON/OFF。
@@ -152,6 +157,14 @@ final class ScanEngineHostView: UIView {
         setup()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // ARKit の投影/表示変換に使う表示ビューサイズ[pt]を反映。
+        if bounds.width > 1, bounds.height > 1 {
+            engine?.previewViewport = bounds.size
+        }
+    }
+
     private func setup() {
         backgroundColor = .black
 
@@ -206,6 +219,11 @@ final class ScanEngineHostView: UIView {
 
             // カメラ位置リンク表示のため、撮影中の姿勢をプレビューへ渡す。
             self.preview?.updateCameraPose(raw.cameraToWorld)
+            // AR オーバーレイ用のカメラ映像・行列（取得できたフレームのみ）。
+            self.preview?.updateCamera(color: raw.color,
+                                       view: raw.cameraView,
+                                       projection: raw.cameraProjection,
+                                       uvTransform: raw.displayTransformInv)
 
             // Mesh 3D 表示（ON のとき最新メッシュを渡す。描画は連続で自動回転）。
             // カメラはメッシュ実バウンディングに合わせる（無ければボリューム全体）。

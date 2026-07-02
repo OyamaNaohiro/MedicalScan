@@ -135,6 +135,14 @@ struct DepthFrame {
 
     /// 適用済みフィルタのビットフラグ（将来: TSDF 統合判断・品質メタに使用）。
     var filterFlags: UInt32 = 0
+
+    // MARK: AR オーバーレイ（カメラ映像へメッシュを重ねるライブ表示用。取得時のみ非nil）
+    /// ARKit ビュー行列（portrait 表示向き。world→camera）。
+    var cameraView: simd_float4x4?
+    /// ARKit 投影行列（portrait・viewport 反映済み）。メッシュを映像に正しく重ねるため使用。
+    var cameraProjection: simd_float4x4?
+    /// 背景カメラ映像の UV 補正（displayTransform の逆行列。portrait）。
+    var displayTransformInv: simd_float3x3?
 }
 
 // MARK: - ScanConfig（全パラメータの一元管理。一部は React から調整）
