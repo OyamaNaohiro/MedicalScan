@@ -15,6 +15,7 @@
 @property (nonatomic) NSInteger tsdfAxis;
 @property (nonatomic) double tsdfSlice;
 @property (nonatomic) BOOL meshView;
+@property (nonatomic) BOOL cameraFollow;
 @property (nonatomic) BOOL sdfSmooth;
 @property (nonatomic) BOOL icpEnabled;
 @property (nonatomic) BOOL connectGate;

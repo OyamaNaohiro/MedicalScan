@@ -1,0 +1,375 @@
+import React, {useState, useEffect, useCallback} from 'react';
+import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
+import {ScanEnginePreview, DepthDisplayMode, ScanMode} from '../native/ScanEnginePreview';
+import {addScanEventListener} from '../native/ScanEventEmitter';
+
+// 対象サイズ別モード（ネイティブ ScanMode と一致）。
+const SCAN_MODES: {
+  value: ScanMode;
+  icon: string;
+  title: string;
+  desc: string;
+  range: string;
+}[] = [
+  {
+    value: ScanMode.Hand,
+    icon: '✋',
+    title: '手・小物',
+    desc: '最も細かい解像度（1.0mm）\n15〜45cmで撮影',
+    range: '15〜45cm',
+  },
+  {
+    value: ScanMode.Foot,
+    icon: '🦶',
+    title: '足・部位',
+    desc: '中解像度（2.0mm）\n20〜60cmで撮影',
+    range: '20〜60cm',
+  },
+  {
+    value: ScanMode.UpperBody,
+    icon: '🧍',
+    title: '上半身',
+    desc: '広範囲（3.0mm）\n20〜90cmで撮影',
+    range: '20〜90cm',
+  },
+];
+
+// 距離ガイドの状態。
+type DistState = 'none' | 'near' | 'ok' | 'far';
+
+const DIST_STYLE: {[k in DistState]: {color: string; label: string}} = {
+  none: {color: '#8e8e93', label: '対象なし'},
+  near: {color: '#ff453a', label: '近すぎ → 離す'},
+  ok: {color: '#30d158', label: '適正'},
+  far: {color: '#ff9f0a', label: '遠すぎ → 近づく'},
+};
+
+export default function ScanSessionScreen() {
+  const [scanMode, setScanMode] = useState<ScanMode>(ScanMode.Hand);
+  const [isScanning, setIsScanning] = useState(false);
+  const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(カメラ視点)
+  const [exportReq, setExportReq] = useState(0);
+
+  // 距離ガイド・進捗の計測値。
+  const [centerDepth, setCenterDepth] = useState(0);
+  const [rangeMin, setRangeMin] = useState(0.15);
+  const [rangeMax, setRangeMax] = useState(0.45);
+  const [tracking, setTracking] = useState('-');
+  const [triangles, setTriangles] = useState(0);
+
+  // タブを離れたら停止。
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setIsScanning(false);
+        setCenterDepth(0);
+        setTriangles(0);
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    const sub = addScanEventListener(event => {
+      if (event.type === 'metrics') {
+        setCenterDepth(event.centerDepthM ?? 0);
+        setRangeMin(event.depthRangeMin ?? 0.15);
+        setRangeMax(event.depthRangeMax ?? 0.45);
+        setTracking(event.tracking ?? '-');
+        setTriangles(event.meshTriangles ?? 0);
+      } else if (event.type === 'exported') {
+        Alert.alert('保存しました', event.path);
+      } else if (event.type === 'engineError') {
+        Alert.alert('エラー', event.message);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // 距離状態の判定。
+  let distState: DistState = 'none';
+  if (centerDepth > 0) {
+    if (centerDepth < rangeMin) distState = 'near';
+    else if (centerDepth > rangeMax) distState = 'far';
+    else distState = 'ok';
+  }
+  const dist = DIST_STYLE[distState];
+  const cm = centerDepth > 0 ? `${Math.round(centerDepth * 100)}` : '--';
+  const trackingOk = tracking === 'normal' || tracking === '-';
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* 常時マウント（エンジン・ボリュームを安定させる）。開始前は上に選択UIを重ねる。 */}
+      <ScanEnginePreview
+        style={styles.preview}
+        isScanning={isScanning}
+        displayMode={DepthDisplayMode.Filtered}
+        scanMode={scanMode}
+        meshView={view3D}
+        cameraFollow={view3D}
+      />
+
+      {/* ─── 開始前: モード選択 ─────────────────────────── */}
+      {!isScanning && (
+        <View style={styles.selectOverlay}>
+          <Text style={styles.selectTitle}>3Dスキャン</Text>
+          <Text style={styles.selectSubtitle}>対象のサイズを選んでください</Text>
+
+          <View style={styles.modeCards}>
+            {SCAN_MODES.map(m => {
+              const active = scanMode === m.value;
+              return (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.modeCard, active && styles.modeCardActive]}
+                  onPress={() => setScanMode(m.value)}>
+                  <Text style={styles.modeIcon}>{m.icon}</Text>
+                  <View style={styles.modeCardBody}>
+                    <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>
+                      {m.title}
+                    </Text>
+                    <Text style={styles.modeDesc}>{m.desc}</Text>
+                  </View>
+                  {active && (
+                    <View style={styles.modeCheck}>
+                      <Text style={styles.modeCheckText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={() => {
+              setView3D(false);
+              setIsScanning(true);
+            }}>
+            <Text style={styles.startButtonText}>スキャン開始</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ─── スキャン中: 距離ガイド + 操作 ───────────────── */}
+      {isScanning && (
+        <>
+          {/* トラッキング警告（背面カメラが環境を捉えられていないとき） */}
+          {!trackingOk && (
+            <View style={styles.trackWarn}>
+              <Text style={styles.trackWarnText}>
+                トラッキング不安定（{tracking}）: 背面カメラに模様のある環境を向けてください
+              </Text>
+            </View>
+          )}
+
+          {/* 中央の距離リング（色で適正距離を示す） */}
+          <View style={styles.ringWrap} pointerEvents="none">
+            <View style={[styles.ring, {borderColor: dist.color}]}>
+              <Text style={[styles.ringCm, {color: dist.color}]}>{cm}</Text>
+              <Text style={styles.ringUnit}>cm</Text>
+            </View>
+            <View style={[styles.distBadge, {backgroundColor: dist.color}]}>
+              <Text style={styles.distBadgeText}>{dist.label}</Text>
+            </View>
+            <Text style={styles.rangeHint}>
+              適正 {Math.round(rangeMin * 100)}〜{Math.round(rangeMax * 100)}cm
+            </Text>
+          </View>
+
+          {/* 上部ステータス */}
+          <View style={styles.topBar}>
+            <View style={styles.recBadge}>
+              <View style={styles.recDot} />
+              <Text style={styles.recText}>スキャン中</Text>
+            </View>
+            <View style={styles.triBadge}>
+              <Text style={styles.triText}>{triangles.toLocaleString()} 面</Text>
+            </View>
+          </View>
+
+          {/* 下部コントロール */}
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={[styles.sideButton, view3D && styles.sideButtonActive]}
+              onPress={() => setView3D(p => !p)}>
+              <Text style={styles.sideButtonText}>{view3D ? '3D' : '深度'}</Text>
+              <Text style={styles.sideButtonSub}>表示</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.stopButton}
+              onPress={() => setIsScanning(false)}>
+              <View style={styles.stopSquare} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={() => setExportReq(Date.now())}>
+              <Text style={styles.saveButtonText}>STL</Text>
+              <Text style={styles.sideButtonSub}>保存</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {flex: 1, backgroundColor: '#000'},
+  preview: {...StyleSheet.absoluteFillObject},
+
+  // 選択オーバーレイ
+  selectOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#101018',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  selectTitle: {fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 6},
+  selectSubtitle: {fontSize: 14, color: '#8e8e93', marginBottom: 28},
+  modeCards: {width: '100%', gap: 12, marginBottom: 32},
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c28',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#2c2c3a',
+  },
+  modeCardActive: {borderColor: '#5e5ce6', backgroundColor: 'rgba(94,92,230,0.14)'},
+  modeIcon: {fontSize: 34, marginRight: 14},
+  modeCardBody: {flex: 1},
+  modeTitle: {fontSize: 18, fontWeight: '700', color: '#ddd', marginBottom: 3},
+  modeTitleActive: {color: '#fff'},
+  modeDesc: {fontSize: 12, color: '#888', lineHeight: 17},
+  modeCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#5e5ce6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeCheckText: {color: '#fff', fontSize: 15, fontWeight: '800'},
+  startButton: {
+    backgroundColor: '#5e5ce6',
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    borderRadius: 28,
+  },
+  startButtonText: {color: '#fff', fontSize: 17, fontWeight: '800'},
+
+  // トラッキング警告
+  trackWarn: {
+    position: 'absolute',
+    top: 70,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(255,159,10,0.92)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  trackWarnText: {color: '#000', fontSize: 12, fontWeight: '600', textAlign: 'center'},
+
+  // 距離リング
+  ringWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ring: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  ringCm: {fontSize: 46, fontWeight: '800', fontVariant: ['tabular-nums']},
+  ringUnit: {color: '#ccc', fontSize: 14, fontWeight: '600', marginTop: -6},
+  distBadge: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  distBadgeText: {color: '#000', fontSize: 15, fontWeight: '800'},
+  rangeHint: {color: '#aaa', fontSize: 12, marginTop: 10, fontWeight: '600'},
+
+  // 上部
+  topBar: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  recBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    gap: 8,
+  },
+  recDot: {width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff3b30'},
+  recText: {color: '#fff', fontSize: 13, fontWeight: '700'},
+  triBadge: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  triText: {color: '#fff', fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
+
+  // 下部コントロール
+  controls: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+  },
+  sideButton: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: 'rgba(60,60,70,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sideButtonActive: {backgroundColor: '#5e5ce6'},
+  sideButtonText: {color: '#fff', fontSize: 16, fontWeight: '800'},
+  sideButtonSub: {color: '#ddd', fontSize: 10, fontWeight: '600'},
+  stopButton: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#ff3b30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopSquare: {width: 30, height: 30, borderRadius: 6, backgroundColor: '#fff'},
+  saveButton: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#34c759',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {color: '#fff', fontSize: 16, fontWeight: '800'},
+});

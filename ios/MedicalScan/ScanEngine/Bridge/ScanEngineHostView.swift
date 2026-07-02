@@ -76,6 +76,11 @@ final class ScanEngineHostView: UIView {
         didSet { preview?.meshEnabled = meshView }
     }
 
+    /// メッシュを撮影中カメラの視点から見る（カメラ位置リンク）。UX 画面で ON。
+    @objc var cameraFollow: Bool = false {
+        didSet { preview?.followCamera = cameraFollow }
+    }
+
     /// SDF 平滑化（ボリューム空間）の ON/OFF。
     @objc var sdfSmooth: Bool = true {
         didSet { engine?.sdfSmoothEnabled = sdfSmooth }
@@ -199,6 +204,9 @@ final class ScanEngineHostView: UIView {
                                  mask: filtered.validMask,
                                  depthMin: cfg.depthMin, depthMax: cfg.depthMax)
 
+            // カメラ位置リンク表示のため、撮影中の姿勢をプレビューへ渡す。
+            self.preview?.updateCameraPose(raw.cameraToWorld)
+
             // Mesh 3D 表示（ON のとき最新メッシュを渡す。描画は連続で自動回転）。
             // カメラはメッシュ実バウンディングに合わせる（無ければボリューム全体）。
             if self.meshView, let mesh = engine.currentMesh() {
@@ -225,8 +233,14 @@ final class ScanEngineHostView: UIView {
             self.depthRate.tick()
             self.metrics.depthFPS = self.depthRate.fps
             // 有効画素率は raw 深度（shared, CPU 可読）から算出する。
+            // ここで depthScratch が現在フレームの全深度で満たされる。
             self.metrics.validRatio = self.computeValidRatio(raw.depth,
                                                              min: cfg.depthMin, max: cfg.depthMax)
+            // 距離ガイド: 中央領域の代表距離＋現在モードの適正レンジ。
+            self.metrics.centerDepthM = Double(self.centerDepth(width: raw.depth.width,
+                                                                height: raw.depth.height))
+            self.metrics.depthRangeMin = Double(cfg.depthMin)
+            self.metrics.depthRangeMax = Double(cfg.depthMax)
             self.metrics.cpuMs = (CACurrentMediaTime() - t0) * 1000.0
             self.emitMetricsThrottled()
         }
@@ -320,5 +334,30 @@ final class ScanEngineHostView: UIView {
             i += stride
         }
         return total > 0 ? Double(valid) / Double(total) : 0
+    }
+
+    /// 画面中央（±15%）の有効深度の中央値を代表距離[m]として返す（0=対象なし）。
+    /// レンジ外でも「近すぎ/遠すぎ」を伝えるため、ここではレンジで足切りしない（広めに 0.05〜2.0m）。
+    /// `computeValidRatio` 直後に呼ぶ前提（depthScratch が現在フレームで満たされている）。
+    private func centerDepth(width w: Int, height h: Int) -> Float {
+        guard w > 0, h > 0, depthScratch.count == w * h else { return 0 }
+        let x0 = Int(Float(w) * 0.35), x1 = Int(Float(w) * 0.65)
+        let y0 = Int(Float(h) * 0.35), y1 = Int(Float(h) * 0.65)
+        var samples: [Float] = []
+        samples.reserveCapacity(512)
+        var y = y0
+        while y < y1 {
+            let row = y * w
+            var x = x0
+            while x < x1 {
+                let d = depthScratch[row + x]
+                if d.isFinite, d > 0.05, d < 2.0 { samples.append(d) }
+                x += 3
+            }
+            y += 3
+        }
+        guard samples.count >= 20 else { return 0 }
+        samples.sort()
+        return samples[samples.count / 2]
     }
 }

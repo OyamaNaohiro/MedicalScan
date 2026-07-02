@@ -54,6 +54,10 @@ final class ScanEnginePreviewView: MTKView {
     private var meshCount = 0
     private var meshCenter = SIMD3<Float>(0, 0, 0)
     private var meshRadius: Float = 0.5
+    /// 撮影中カメラの最新姿勢（ワールド）。カメラ位置リンク表示に使う。
+    private var cameraToWorld: simd_float4x4?
+    /// true でメッシュを「撮影中カメラの視点」から描画（自動回転→カメラ位置リンク）。
+    var followCamera = false
     /// true で 3D メッシュ表示（連続描画して自動回転）。
     var meshEnabled = false {
         didSet {
@@ -154,15 +158,33 @@ final class ScanEnginePreviewView: MTKView {
         self.meshRadius = max(0.05, radius)
     }
 
-    /// 時間で回る軌道カメラの MVP を作る。
+    /// 撮影中カメラの姿勢を更新（カメラ位置リンク表示用）。
+    func updateCameraPose(_ pose: simd_float4x4) {
+        self.cameraToWorld = pose
+    }
+
+    /// メッシュ描画の MVP を作る。
+    /// followCamera かつ姿勢があれば「撮影中カメラの視点」から見る（＝カメラ位置にリンク）。
+    /// それ以外は時間で回る軌道カメラ（自動回転）。
     fileprivate func meshMVP(aspect: Float) -> simd_float4x4 {
+        let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
+                                    near: 0.02, far: meshRadius * 12 + 1)
+        if followCamera, let c = cameraToWorld {
+            // カメラのワールド位置からメッシュ中心を見る。近すぎて内部に入らないよう最小距離を確保。
+            let camPos = SIMD3<Float>(c.columns.3.x, c.columns.3.y, c.columns.3.z)
+            var eye = camPos
+            let toCenter = meshCenter - eye
+            let d = simd_length(toCenter)
+            let minD = meshRadius * 1.2
+            if d > 1e-4, d < minD { eye = meshCenter - (toCenter / d) * minD }
+            let view = Self.lookAt(eye: eye, center: meshCenter, up: SIMD3<Float>(0, 1, 0))
+            return proj * view
+        }
         let t = Float(CACurrentMediaTime())
         let angle = t * 0.6
         let dist = meshRadius * 2.0   // 実メッシュ境界に寄せて大きく表示
         let eye = meshCenter + SIMD3<Float>(cos(angle) * dist, meshRadius * 0.5, sin(angle) * dist)
         let view = Self.lookAt(eye: eye, center: meshCenter, up: SIMD3<Float>(0, 1, 0))
-        let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
-                                    near: 0.02, far: meshRadius * 12 + 1)
         return proj * view
     }
 

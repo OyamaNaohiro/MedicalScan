@@ -39,8 +39,8 @@ enum ScanMode: Int {
         var c = ScanConfig()
         switch self {
         case .hand:
-            c.voxelSize = 0.0015                 // 1.5mm（センサー限界付近・細部重視）
-            c.volumeExtent = [0.3, 0.3, 0.3]     // 200^3 ≈ 800万ボクセル
+            c.voxelSize = 0.001                  // 1.0mm（TrueDepth ノイズ床付近・最細部）
+            c.volumeExtent = [0.25, 0.25, 0.25]  // 250^3 ≈ 1560万ボクセル（≈125MB。0.3箱だと1mmで上限超過のため0.25に）
             c.depthMin = 0.15
             c.depthMax = 0.45
         case .foot:

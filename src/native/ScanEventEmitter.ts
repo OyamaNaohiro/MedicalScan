@@ -26,6 +26,9 @@ export type ScanEventPayload =
       icpRmsMm: number;
       icpCorr: number;
       icpApplied: boolean;
+      centerDepthM: number;
+      depthRangeMin: number;
+      depthRangeMax: number;
     }
   | {type: 'engineState'; state: string; tracking?: string}
   | {type: 'engineError'; message: string}

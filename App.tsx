@@ -5,6 +5,7 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import ScanScreen from './src/screens/ScanScreen';
+import ScanSessionScreen from './src/screens/ScanSessionScreen';
 import ScanEngineScreen from './src/screens/ScanEngineScreen';
 import FilesScreen from './src/screens/FilesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -39,6 +40,15 @@ function App() {
               title: 'スキャン',
               headerShown: false,
               tabBarLabel: 'スキャン',
+            }}
+          />
+          <Tab.Screen
+            name="Capture"
+            component={ScanSessionScreen}
+            options={{
+              title: '3Dスキャン',
+              headerShown: false,
+              tabBarLabel: '3Dスキャン',
             }}
           />
           <Tab.Screen

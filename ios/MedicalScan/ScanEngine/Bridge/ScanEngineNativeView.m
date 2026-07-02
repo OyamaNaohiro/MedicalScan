@@ -77,6 +77,11 @@
   [_impl setValue:@(meshView) forKey:@"meshView"];
 }
 
+- (void)setCameraFollow:(BOOL)cameraFollow {
+  _cameraFollow = cameraFollow;
+  [_impl setValue:@(cameraFollow) forKey:@"cameraFollow"];
+}
+
 - (void)setSdfSmooth:(BOOL)sdfSmooth {
   _sdfSmooth = sdfSmooth;
   [_impl setValue:@(sdfSmooth) forKey:@"sdfSmooth"];

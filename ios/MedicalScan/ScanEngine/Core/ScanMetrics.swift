@@ -48,6 +48,11 @@ struct ScanMetrics {
     var icpCorr: Int = 0
     var icpApplied: Bool = false
 
+    // 距離ガイド（UX 画面用）。中央領域の代表距離と現在モードの有効レンジ。
+    var centerDepthM: Double = 0     // 画面中央の対象までの距離[m]（0=対象なし）
+    var depthRangeMin: Double = 0    // 適正レンジ下限[m]
+    var depthRangeMax: Double = 0    // 適正レンジ上限[m]
+
     /// ScanEventEmitter で RN へ送るための辞書表現（軽量・数値のみ）。
     var dictionary: [String: Any] {
         [
@@ -70,6 +75,9 @@ struct ScanMetrics {
             "icpRmsMm": icpRmsMm,
             "icpCorr": icpCorr,
             "icpApplied": icpApplied,
+            "centerDepthM": centerDepthM,
+            "depthRangeMin": depthRangeMin,
+            "depthRangeMax": depthRangeMax,
         ]
     }
 }

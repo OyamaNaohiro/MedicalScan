@@ -54,7 +54,7 @@ const MODES: {label: string; value: DepthDisplayMode}[] = [
 
 // 対象サイズ別スキャンモード（開始前に選択。voxel解像度・箱・深度レンジが切り替わる）。
 const SCAN_MODES: {label: string; sub: string; value: ScanMode}[] = [
-  {label: '手・小物', sub: '30cm / 1.5mm', value: ScanMode.Hand},
+  {label: '手・小物', sub: '25cm / 1.0mm', value: ScanMode.Hand},
   {label: '足・部位', sub: '50cm / 2.0mm', value: ScanMode.Foot},
   {label: '上半身', sub: '1m / 3.0mm', value: ScanMode.UpperBody},
 ];

@@ -28,6 +28,7 @@ interface ScanEnginePreviewProps {
   tsdfAxis?: number; // 0:XY 1:XZ 2:YZ
   tsdfSlice?: number; // 0..1
   meshView?: boolean; // 3Dメッシュ表示
+  cameraFollow?: boolean; // メッシュを撮影中カメラ視点で表示（カメラ位置リンク）
   sdfSmooth?: boolean; // SDF平滑化 ON/OFF
   icpEnabled?: boolean; // ICP 姿勢補正 ON/OFF
   connectGate?: boolean; // 整合ゲート ON/OFF
@@ -58,6 +59,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   tsdfAxis = 0,
   tsdfSlice = 0.5,
   meshView = false,
+  cameraFollow = false,
   sdfSmooth = true,
   icpEnabled = false,
   connectGate = true,
@@ -82,6 +84,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       tsdfAxis={tsdfAxis}
       tsdfSlice={tsdfSlice}
       meshView={meshView}
+      cameraFollow={cameraFollow}
       sdfSmooth={sdfSmooth}
       icpEnabled={icpEnabled}
       connectGate={connectGate}
