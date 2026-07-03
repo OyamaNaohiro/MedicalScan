@@ -56,15 +56,57 @@ final class DefaultLoopClosureDetector: LoopClosureDetector {
 
 // MARK: - 既定の Pose Graph Optimization（安全な恒等・実装拡張点）
 
-/// 既定は「補正なし（恒等）」を返す安全実装。
-/// ループ拘束を用いた実 SE(3) 最適化（Gauss-Newton / LM, se(3) 上の残差最小化）は
-/// ここに実装する。誤った最適化で悪化させないため、未実装時は入力姿勢をそのまま返す。
+/// ポーズグラフを SE(3) 上で反復緩和（Gauss-Seidel 型）する既定実装。
+/// 各エッジについて「i から予測した j」「j から予測した i」へ姿勢を少しずつ寄せ、
+/// オドメトリとループ拘束の食い違い（ドリフト）を全体へ分配する。node[0] はアンカー固定。
+///
+/// 安全ガード: 反復後にエッジ総残差が減っていなければ入力姿勢をそのまま返す（悪化させない）。
+/// ループ拘束が VIO 相対のまま（estimateRelative 未設定）だと食い違いが無く自然に無改変になる。
+/// 実効性を出すには DefaultLoopClosureDetector.estimateRelative に幾何的な相対姿勢（ICP等）を与える。
 final class DefaultPoseGraphOptimizer: PoseGraphOptimizer {
+
     func optimize(nodes: [simd_float4x4], edges: [PoseGraphEdge],
                   config: GlobalOptConfig) -> [simd_float4x4] {
-        // TODO(実装拡張点): edges（odometry + loop）から情報行列付き残差を組み、
-        //   ノード姿勢を se(3) 上で反復最適化する。node[0] をアンカー固定。
-        return nodes
+        guard nodes.count >= 2, !edges.isEmpty else { return nodes }
+
+        var poses = nodes
+        let anchor = 0
+        let errBefore = totalError(poses, edges)
+        let stepBase: Float = 0.2   // 1 エッジあたりの寄せ率（過補正防止）
+
+        for _ in 0..<config.pgoIterations {
+            for e in edges {
+                guard e.from < poses.count, e.to < poses.count else { continue }
+                let w = min(1.0, max(0.0, e.weight)) * stepBase
+                guard w > 0 else { continue }
+                // i から予測した j へ寄せる。
+                if e.to != anchor {
+                    let predJ = poses[e.from] * e.relativePose
+                    poses[e.to] = PoseMath.blend(poses[e.to], predJ, w)
+                }
+                // j から予測した i へ寄せる。
+                if e.from != anchor {
+                    let predI = poses[e.to] * e.relativePose.inverse
+                    poses[e.from] = PoseMath.blend(poses[e.from], predI, w)
+                }
+            }
+        }
+
+        let errAfter = totalError(poses, edges)
+        return errAfter < errBefore ? poses : nodes   // 改善時のみ採用
+    }
+
+    /// エッジ総残差（並進 [m] + 回転 [rad] を重み付き加算）。
+    private func totalError(_ poses: [simd_float4x4], _ edges: [PoseGraphEdge]) -> Float {
+        var sum: Float = 0
+        for e in edges {
+            guard e.from < poses.count, e.to < poses.count else { continue }
+            let rel = poses[e.from].inverse * poses[e.to]
+            let dt = simd_length(PoseMath.translation(rel) - PoseMath.translation(e.relativePose))
+            let da = PoseMath.angle(rel, e.relativePose)
+            sum += (dt + da) * max(0.001, e.weight)
+        }
+        return sum
     }
 }
 
@@ -105,6 +147,14 @@ final class TSDFReintegrator {
 
 // MARK: - オーケストレータ
 
+/// 大域最適化の実行統計（ログ/可視化用）。
+struct GlobalOptStats {
+    var keyframes = 0
+    var loopCandidates = 0
+    var correctionApplied = false   // PGO が実際に姿勢を補正したか
+    var triangles = 0
+}
+
 /// 検出→最適化→再統合→再メッシュを束ねる。差し替え可能な detector / optimizer を保持。
 final class GlobalOptimizationPipeline {
 
@@ -112,10 +162,15 @@ final class GlobalOptimizationPipeline {
     var optimizer: PoseGraphOptimizer = DefaultPoseGraphOptimizer()
     private let reintegrator = TSDFReintegrator()
 
+    /// 直近 run() の統計（呼び出し後に読む）。
+    private(set) var lastStats = GlobalOptStats()
+
     /// - Returns: 再生成した頂点スープ（CPUMesh）。失敗時は nil（呼び出し側は従来メッシュにフォールバック）。
     func run(frames: [Keyframe], config: ScanConfig, gConfig: GlobalOptConfig,
              context: MetalContext) -> CPUMesh? {
+        lastStats = GlobalOptStats()
         guard frames.count >= 2 else { return nil }
+        lastStats.keyframes = frames.count
 
         // 1) エッジ構築: オドメトリ（連続キーフレーム）＋ ループ拘束。
         var edges: [PoseGraphEdge] = []
@@ -126,6 +181,7 @@ final class GlobalOptimizationPipeline {
                                        weight: 1, kind: .odometry))
         }
         let candidates = detector.detect(frames, config: gConfig)
+        lastStats.loopCandidates = candidates.count
         for c in candidates {
             edges.append(PoseGraphEdge(from: c.from, to: c.to, relativePose: c.relativePose,
                                        weight: c.confidence, kind: .loop))
@@ -135,7 +191,13 @@ final class GlobalOptimizationPipeline {
         let nodes = frames.map { $0.pose }
         let corrected = optimizer.optimize(nodes: nodes, edges: edges, config: gConfig)
         if corrected.count == frames.count {
-            for i in 0..<frames.count { frames[i].pose = corrected[i] }
+            // 実際に姿勢が動いたか（安全ガードで無改変のこともある）。
+            var moved = false
+            for i in 0..<frames.count {
+                if PoseMath.distance(corrected[i], frames[i].pose) > 1e-5 { moved = true }
+                frames[i].pose = corrected[i]
+            }
+            lastStats.correctionApplied = moved
         }
 
         // 3) 新規ボリュームへ再統合（補正姿勢で）。
@@ -155,6 +217,7 @@ final class GlobalOptimizationPipeline {
 
         let soup = extractor.readbackPositions(context: context)
         guard soup.count >= 3 else { return nil }
+        lastStats.triangles = soup.count / 3
         return CPUMesh(positions: soup)
     }
 }

@@ -148,4 +148,21 @@ enum PoseMath {
         let c = max(-1, min(1, (trace - 1) * 0.5))
         return acos(c)
     }
+
+    /// 回転(quat)＋並進から 4x4 姿勢を組み立てる。
+    static func makePose(rotation q: simd_quatf, translation t: SIMD3<Float>) -> simd_float4x4 {
+        let r = simd_float3x3(q)
+        return simd_float4x4(SIMD4(r.columns.0, 0),
+                             SIMD4(r.columns.1, 0),
+                             SIMD4(r.columns.2, 0),
+                             SIMD4(t, 1))
+    }
+
+    /// 2 姿勢を係数 t（0..1）で補間する（回転は slerp、並進は線形）。PGO の緩和更新に使う。
+    static func blend(_ a: simd_float4x4, _ b: simd_float4x4, _ t: Float) -> simd_float4x4 {
+        let qa = simd_quatf(rot3(a)), qb = simd_quatf(rot3(b))
+        let q = simd_slerp(qa, qb, t)
+        let tr = translation(a) + (translation(b) - translation(a)) * t
+        return makePose(rotation: q, translation: tr)
+    }
 }

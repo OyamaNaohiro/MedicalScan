@@ -278,6 +278,11 @@ final class ScanEngine: DepthFrameSourceDelegate {
                                                     config: config, gConfig: globalOptConfig,
                                                     context: context) {
             soup = regenerated.positions
+            let s = globalOptPipeline.lastStats
+            DispatchQueue.main.async { [weak self] in
+                self?.onEvent?("globalOpt",
+                    "大域最適化: KF \(s.keyframes) / ループ候補 \(s.loopCandidates) / 補正 \(s.correctionApplied ? "有" : "無") / 三角形 \(s.triangles)")
+            }
         } else {
             soup = extractor.readbackPositions(context: context)
         }
