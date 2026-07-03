@@ -48,6 +48,7 @@
 		AB000030B368108700A75B9A /* MeshPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000031B368108700A75B9A /* MeshPostProcessor.swift */; };
 		AB000032B368108700A75B9A /* STLExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000033B368108700A75B9A /* STLExporter.swift */; };
 		AB000034B368108700A75B9A /* VertexWeld.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000035B368108700A75B9A /* VertexWeld.swift */; };
+		AB0000E0B368108700A75B9A /* HoleFilling.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000E1B368108700A75B9A /* HoleFilling.swift */; };
 		AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000037B368108700A75B9A /* TaubinSmoothing.swift */; };
 		AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000039B368108700A75B9A /* QEMDecimation.swift */; };
 		AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00003BB368108700A75B9A /* ICPRefiner.swift */; };
@@ -109,6 +110,7 @@
 		AB000031B368108700A75B9A /* MeshPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeshPostProcessor.swift; path = MedicalScan/ScanEngine/Meshing/MeshPostProcessor.swift; sourceTree = "<group>"; };
 		AB000033B368108700A75B9A /* STLExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = STLExporter.swift; path = MedicalScan/ScanEngine/Export/STLExporter.swift; sourceTree = "<group>"; };
 		AB000035B368108700A75B9A /* VertexWeld.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VertexWeld.swift; path = MedicalScan/ScanEngine/Meshing/VertexWeld.swift; sourceTree = "<group>"; };
+		AB0000E1B368108700A75B9A /* HoleFilling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HoleFilling.swift; path = MedicalScan/ScanEngine/Meshing/HoleFilling.swift; sourceTree = "<group>"; };
 		AB000037B368108700A75B9A /* TaubinSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaubinSmoothing.swift; path = MedicalScan/ScanEngine/Meshing/TaubinSmoothing.swift; sourceTree = "<group>"; };
 		AB000039B368108700A75B9A /* QEMDecimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QEMDecimation.swift; path = MedicalScan/ScanEngine/Meshing/QEMDecimation.swift; sourceTree = "<group>"; };
 		AB00003BB368108700A75B9A /* ICPRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ICPRefiner.swift; path = MedicalScan/ScanEngine/Tracking/ICPRefiner.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 				AB000031B368108700A75B9A /* MeshPostProcessor.swift */,
 				AB000033B368108700A75B9A /* STLExporter.swift */,
 				AB000035B368108700A75B9A /* VertexWeld.swift */,
+				AB0000E1B368108700A75B9A /* HoleFilling.swift */,
 				AB000037B368108700A75B9A /* TaubinSmoothing.swift */,
 				AB000039B368108700A75B9A /* QEMDecimation.swift */,
 				AB00003BB368108700A75B9A /* ICPRefiner.swift */,
@@ -423,6 +426,7 @@
 				AB000030B368108700A75B9A /* MeshPostProcessor.swift in Sources */,
 				AB000032B368108700A75B9A /* STLExporter.swift in Sources */,
 				AB000034B368108700A75B9A /* VertexWeld.swift in Sources */,
+				AB0000E0B368108700A75B9A /* HoleFilling.swift in Sources */,
 				AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */,
 				AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */,
 				AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */,
@@ -441,7 +445,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 84;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -472,7 +476,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 84;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
