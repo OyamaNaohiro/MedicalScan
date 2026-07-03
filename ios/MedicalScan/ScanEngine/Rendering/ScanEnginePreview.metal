@@ -75,7 +75,10 @@ fragment float4 cameraBGFragment(VertexOut in [[stage_in]],
                                  texture2d<float, access::sample> colorTex [[texture(0)]],
                                  constant CameraBGUniforms& u [[buffer(0)]]) {
     constexpr sampler s(address::clamp_to_edge, filter::linear);
-    float3 t = u.uvTransform * float3(in.uv, 1.0);
+    // フルスクリーン頂点の uv は Y 上向き（uv.y=0 が画面下）だが、
+    // displayTransform は Y 下向き（画像座標, 原点=左上）前提。Y を反転して整合させる。
+    float2 vc = float2(in.uv.x, 1.0 - in.uv.y);
+    float3 t = u.uvTransform * float3(vc, 1.0);
     return float4(colorTex.sample(s, t.xy).rgb, 1.0);
 }
 
