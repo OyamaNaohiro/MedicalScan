@@ -106,6 +106,12 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.sparseEnabled = sparseEnabled }
     }
 
+    /// 大域最適化（ループ閉じ込み+PGO）の ON/OFF。ON でスキャン中にキーフレームを保持し、
+    /// 保存時に再統合・再メッシュする（エクスポート専用・要スキャン開始前設定）。既定 OFF。
+    @objc var globalOptimize: Bool = false {
+        didSet { engine?.globalOptimizationEnabled = globalOptimize }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。
@@ -118,8 +124,10 @@ final class ScanEngineHostView: UIView {
             guard exportRequest > 0, exportRequest != oldValue, let engine else { return }
             let binary = exportFormat == 0
             let ts = Int(exportRequest)
+            let globalOpt = globalOptimize
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let url = engine.exportSTL(binary: binary, filename: "scan_\(ts)")
+                let url = engine.exportSTL(binary: binary, filename: "scan_\(ts)",
+                                           globalOptimize: globalOpt)
                 DispatchQueue.main.async {
                     if let url {
                         ScanEventEmitter.emitEvent(["type": "exported", "path": url.path])

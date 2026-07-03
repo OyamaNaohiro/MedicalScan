@@ -111,6 +111,19 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// SDF 平滑化の ON/OFF（A/B 比較用）。
     var sdfSmoothEnabled = true
 
+    // 大域最適化（エクスポート専用・リアルタイムと分離）。
+    /// キーフレーム間引き・ループ検出・PGO のパラメータ。
+    let globalOptConfig = GlobalOptConfig()
+    /// スキャン中にキーフレームを間引き保持する（有効時のみ・60fps を犠牲にしない）。
+    private(set) lazy var keyframeRecorder = KeyframeRecorder(config: globalOptConfig)
+    /// エクスポート時の大域最適化パイプライン（検出→PGO→再統合→再メッシュ）。
+    private let globalOptPipeline = GlobalOptimizationPipeline()
+    /// 大域最適化の ON/OFF。ON にするとスキャン中にキーフレームを保持し、保存時に大域最適化する。
+    /// 既定 OFF（キーフレーム保持もしない＝コストゼロ）。スキャン開始前に設定する。
+    var globalOptimizationEnabled = false {
+        didSet { keyframeRecorder.enabled = globalOptimizationEnabled }
+    }
+
     /// 現在の追従状態（capture キューで更新）。normal のときだけ配置・統合する。
     private var currentTracking: ScanTrackingState = .notAvailable
 
@@ -189,6 +202,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
         }
         currentTracking = .notAvailable   // 再開時は追従が normal になるまで配置・統合しない
         meshFrameCounter = 0
+        keyframeRecorder.reset()          // 大域最適化用キーフレームを破棄（有効時のみ蓄積）
         setState(.starting)
         source.start()
     }
@@ -252,9 +266,21 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     /// 現在のメッシュを STL 化してドキュメントへ保存し、URL を返す（同期・要バックグラウンド）。
     /// エクスポートパイプライン（後処理）はここに差し込む（Phase 7b）。
-    func exportSTL(binary: Bool, filename: String) -> URL? {
+    /// - Parameter globalOptimize: true かつキーフレームがあれば、大域最適化（ループ閉じ込み+PGO）
+    ///   → TSDF 再統合 → 再メッシュで頂点を作り直してから後処理する（エクスポート専用）。
+    func exportSTL(binary: Bool, filename: String, globalOptimize: Bool = false) -> URL? {
         guard let extractor = meshExtractor else { return nil }
-        let soup = extractor.readbackPositions(context: context)
+
+        // 頂点スープの取得元を選ぶ。大域最適化 ON なら再生成、それ以外は現在のメッシュ。
+        var soup: [SIMD3<Float>]
+        if globalOptimize, keyframeRecorder.store.count >= 2,
+           let regenerated = globalOptPipeline.run(frames: keyframeRecorder.store.snapshot(),
+                                                    config: config, gConfig: globalOptConfig,
+                                                    context: context) {
+            soup = regenerated.positions
+        } else {
+            soup = extractor.readbackPositions(context: context)
+        }
         guard soup.count >= 3 else { return nil }
 
         // エクスポート後処理（Weld→Taubin→QEM）。削減率を反映してから走らせる。
@@ -363,6 +389,15 @@ final class ScanEngine: DepthFrameSourceDelegate {
                     DispatchQueue.main.async { self?.onTSDFStats?(stats) }
                 }
                 cb.commit()
+            }
+
+            // 大域最適化用キーフレーム保持（有効時のみ・間引き。深度は raw 所有テクスチャを参照保持）。
+            // 姿勢は統合に使った pose（ICP 補正後含む）。リアルタイム経路への影響は無効時ゼロ。
+            if doIntegrate {
+                keyframeRecorder.consider(depth: frame.depth, pose: integrateFrame.cameraToWorld,
+                                          intrinsics: frame.intrinsics,
+                                          width: frame.width, height: frame.height,
+                                          timestamp: frame.timestamp)
             }
 
             // Mesh 抽出（統合したフレームのみ・スロットル。Voxel 更新後に読むので順序は queue が保証）。

@@ -102,6 +102,11 @@
   [_impl setValue:@(sparseEnabled) forKey:@"sparseEnabled"];
 }
 
+- (void)setGlobalOptimize:(BOOL)globalOptimize {
+  _globalOptimize = globalOptimize;
+  [_impl setValue:@(globalOptimize) forKey:@"globalOptimize"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];
