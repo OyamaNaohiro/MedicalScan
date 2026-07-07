@@ -154,7 +154,7 @@ struct ScanConfig {
     /// 切り詰め距離の倍率（voxelSize 比）。大きいほど近接面が融合しやすく「つながり」優先
     /// （ドリフトの二重壁を1枚へ融合）、小さいほど細部が出るが二重壁になりやすい。
     /// ※ sparse 統合の 3x3x3 マーキング被覆に収めるため実質上限は ~6。
-    var truncationScale: Float = 6
+    var truncationScale: Float = 4
     /// 切り詰め距離。voxelSize × truncationScale（融合＝つながりを優先）。
     var truncation: Float { voxelSize * truncationScale }
 
