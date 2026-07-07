@@ -39,10 +39,13 @@ enum ScanMode: Int {
         var c = ScanConfig()
         switch self {
         case .hand:
-            c.voxelSize = 0.001                  // 1.0mm（TrueDepth ノイズ床付近・最細部）
-            c.volumeExtent = [0.25, 0.25, 0.25]  // 250^3 ≈ 1560万ボクセル（≈125MB。0.3箱だと1mmで上限超過のため0.25に）
+            c.voxelSize = 0.0015                 // 1.5mm（ノイズ床(~1mm)より大きくモデルが安定・十分細かい）
+            c.volumeExtent = [0.3, 0.3, 0.3]     // 200^3 ≈ 800万ボクセル（≈64MB）
             c.depthMin = 0.15
             c.depthMax = 0.45
+            // 1mm はノイズ床(~0.5-1mm)とほぼ同寸でモデルが荒れやすく、×4(4mm)だと ICP 対応バンドが
+            // 狭く追従が不安定になる。手だけ ×6 に広げてブートストラップの荒れに頑健化する。
+            c.truncationScale = 6
         case .foot:
             c.voxelSize = 0.002                  // 2.0mm
             c.volumeExtent = [0.5, 0.5, 0.5]     // 250^3 ≈ 1560万ボクセル

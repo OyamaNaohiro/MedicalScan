@@ -17,7 +17,7 @@ const SCAN_MODES: {
     value: ScanMode.Hand,
     icon: '✋',
     title: '手・小物',
-    desc: '最も細かい解像度（1.0mm）\n15〜45cmで撮影',
+    desc: '最も細かい解像度（1.5mm）\n15〜45cmで撮影',
     range: '15〜45cm',
   },
   {
