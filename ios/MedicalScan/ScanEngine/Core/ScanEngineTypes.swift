@@ -173,9 +173,10 @@ struct ScanConfig {
     var maxWeight: Float = 64       // 重み上限（適応性を保つ）
 
     // SDF 平滑化（ボリューム空間。MC 前に距離場を整える）
-    var sdfSmoothIterations: Int = 1
+    // 反復・ブレンドを強めると、融合したつながりは保ったまま表面のさざ波（ぼこぼこ）を均せる。
+    var sdfSmoothIterations: Int = 2     // 反復回数（1→2 で表面のさざ波を低減）
     var sdfSmoothRadius: Int = 1          // 近傍半径（1=3^3）
-    var sdfSmoothAmount: Float = 0.7      // 自距離→近傍平均へのブレンド 0..1
+    var sdfSmoothAmount: Float = 0.8      // 自距離→近傍平均へのブレンド 0..1（0.7→0.8 で更に平滑）
     var sdfNoiseMinNeighbors: Int = 5     // 観測近傍がこれ未満なら孤立ノイズとして除去
     var sdfHoleFillMinNeighbors: Int = 16 // 観測近傍がこれ以上なら未観測穴を補完
 
