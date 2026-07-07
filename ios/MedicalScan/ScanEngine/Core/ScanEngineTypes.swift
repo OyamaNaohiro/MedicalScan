@@ -151,14 +151,18 @@ struct ScanConfig {
     // 体積・解像度
     var voxelSize: Float = 0.003                       // 3 mm
     var volumeExtent: SIMD3<Float> = [0.6, 1.2, 0.6]   // ~上半身（m）
-    /// 切り詰め距離。経験則で voxelSize の数倍（薄板の表裏が混ざらない範囲）。
-    var truncation: Float { voxelSize * 4 }
+    /// 切り詰め距離の倍率（voxelSize 比）。大きいほど近接面が融合しやすく「つながり」優先
+    /// （ドリフトの二重壁を1枚へ融合）、小さいほど細部が出るが二重壁になりやすい。
+    /// ※ sparse 統合の 3x3x3 マーキング被覆に収めるため実質上限は ~6。
+    var truncationScale: Float = 6
+    /// 切り詰め距離。voxelSize × truncationScale（融合＝つながりを優先）。
+    var truncation: Float { voxelSize * truncationScale }
 
     // TrueDepth 有効性マスク（per-pixel confidence が無い代替）
     var depthMin: Float = 0.20      // m
     var depthMax: Float = 0.90      // m
     var qualityMin: Float = 0.5     // フレーム品質の足切り
-    var grazingCosMin: Float = 0.2  // |視線・法線| の下限（斜め縁を除外）
+    var grazingCosMin: Float = 0.1  // |視線・法線| の下限。低いほど斜め縁も採用→周回時に側面がつながりやすい
 
     // フィルタ
     var bilateralSigmaSpace: Float = 3
