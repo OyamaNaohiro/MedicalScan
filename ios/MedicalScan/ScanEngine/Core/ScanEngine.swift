@@ -99,6 +99,12 @@ final class ScanEngine: DepthFrameSourceDelegate {
         didSet { source.setViewport(previewViewport) }
     }
 
+    /// ワールドトラッキング（6DOF 姿勢）の ON/OFF。既定 ON。スキャン開始前に設定する
+    /// （OFF は前面トラッキング＋IMU のみになり、端末を大きく動かす撮影では姿勢精度が落ちる）。
+    var worldTrackingEnabled = true {
+        didSet { source.setWorldTracking(worldTrackingEnabled) }
+    }
+
     // ICP Refinement（VIO 初期値の微調整。frame-to-model）。
     private let icpRefiner = ICPRefiner()
     /// ICP 姿勢補正の ON/OFF（既定 OFF。誤りやすいので任意）。

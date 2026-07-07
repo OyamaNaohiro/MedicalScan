@@ -29,11 +29,15 @@ protocol DepthFrameSource: AnyObject {
 
     /// 表示ビューのサイズ[pt]（ARKit の投影/表示変換に使用）。非対応ソースは無視でよい。
     func setViewport(_ size: CGSize)
+
+    /// ワールドトラッキング（6DOF 姿勢）の ON/OFF。開始時に反映。非対応ソースは無視でよい。
+    func setWorldTracking(_ enabled: Bool)
 }
 
 extension DepthFrameSource {
     func setColorCapture(_ enabled: Bool) {}
     func setViewport(_ size: CGSize) {}
+    func setWorldTracking(_ enabled: Bool) {}
 }
 
 /// DepthFrameSource からの通知。すべて 1 つの直列キュー上で呼ばれることを保証する実装にする。

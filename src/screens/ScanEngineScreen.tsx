@@ -75,6 +75,7 @@ export default function ScanEngineScreen() {
   const [connectGate, setConnectGate] = useState(true);
   const [sparseEnabled, setSparseEnabled] = useState(true);
   const [globalOptimize, setGlobalOptimize] = useState(false);
+  const [worldTracking, setWorldTracking] = useState(true);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
   const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25
@@ -144,6 +145,7 @@ export default function ScanEngineScreen() {
         connectGate={connectGate}
         sparseEnabled={sparseEnabled}
         globalOptimize={globalOptimize}
+        worldTracking={worldTracking}
         exportFormat={exportFormat}
         exportRequest={exportReq}
         decimateRatio={decimate}
@@ -235,6 +237,7 @@ export default function ScanEngineScreen() {
         <FilterChip label="ICP" on={icpEnabled} onPress={() => setIcpEnabled(p => !p)} />
         <FilterChip label="Sparse" on={sparseEnabled} onPress={() => setSparseEnabled(p => !p)} />
         <FilterChip label="GlobalOpt" on={globalOptimize} onPress={() => setGlobalOptimize(p => !p)} />
+        <FilterChip label="World" on={worldTracking} onPress={() => setWorldTracking(p => !p)} />
       </View>
 
       {/* TSDF スライス表示 */}

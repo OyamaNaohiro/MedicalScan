@@ -107,6 +107,11 @@
   [_impl setValue:@(globalOptimize) forKey:@"globalOptimize"];
 }
 
+- (void)setWorldTracking:(BOOL)worldTracking {
+  _worldTracking = worldTracking;
+  [_impl setValue:@(worldTracking) forKey:@"worldTracking"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];

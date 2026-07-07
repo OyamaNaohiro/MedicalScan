@@ -34,6 +34,7 @@ interface ScanEnginePreviewProps {
   connectGate?: boolean; // 整合ゲート ON/OFF
   sparseEnabled?: boolean; // ブロックスパース統合 ON/OFF
   globalOptimize?: boolean; // 大域最適化(ループ閉じ込み+PGO) 保存時 ON/OFF
+  worldTracking?: boolean; // ワールドトラッキング(6DOF姿勢) ON/OFF(開始前に設定)
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
   decimateRatio?: number; // 1.0=フル 0.5=半分 0.25=1/4
@@ -66,6 +67,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   connectGate = true,
   sparseEnabled = true,
   globalOptimize = false,
+  worldTracking = true,
   exportFormat = 0,
   exportRequest = 0,
   decimateRatio = 1.0,
@@ -92,6 +94,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       connectGate={connectGate}
       sparseEnabled={sparseEnabled}
       globalOptimize={globalOptimize}
+      worldTracking={worldTracking}
       exportFormat={exportFormat}
       exportRequest={exportRequest}
       decimateRatio={decimateRatio}

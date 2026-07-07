@@ -112,6 +112,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.globalOptimizationEnabled = globalOptimize }
     }
 
+    /// ワールドトラッキング（6DOF 姿勢）の ON/OFF。既定 ON。スキャン開始前に設定する。
+    @objc var worldTracking: Bool = true {
+        didSet { engine?.worldTrackingEnabled = worldTracking }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。

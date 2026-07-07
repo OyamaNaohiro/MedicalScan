@@ -21,6 +21,7 @@
 @property (nonatomic) BOOL connectGate;
 @property (nonatomic) BOOL sparseEnabled;
 @property (nonatomic) BOOL globalOptimize;
+@property (nonatomic) BOOL worldTracking;
 @property (nonatomic) NSInteger exportFormat;
 @property (nonatomic) double exportRequest;
 @property (nonatomic) double decimateRatio;

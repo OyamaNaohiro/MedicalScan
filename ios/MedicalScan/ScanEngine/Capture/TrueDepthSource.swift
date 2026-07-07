@@ -29,6 +29,9 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
     private let queue = DispatchQueue(label: "scanengine.truedepth.capture", qos: .userInitiated)
     private var lastTracking: ScanTrackingState?
 
+    // ワールドトラッキング（背面カメラ VIO による 6DOF 姿勢）の ON/OFF。開始時に反映。
+    private var worldTrackingEnabled = true
+
     // AR オーバーレイ（カメラ映像へメッシュを重ねる）用。ON のときだけカラーと行列を取得する。
     private var wantsColor = false
     /// 表示ビューのサイズ[pt]（ARKit の投影/表示変換に使う）。既定は縦長端末の目安。
@@ -57,7 +60,8 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
         }
         let config = ARFaceTrackingConfiguration()
         // 端末が対応していればワールド姿勢を有効化（TSDF への姿勢統合に必要）。
-        if ARFaceTrackingConfiguration.supportsWorldTracking {
+        // トグルで OFF にすると前面トラッキング＋IMU のみになり、大きな端末移動では姿勢精度が落ちる。
+        if ARFaceTrackingConfiguration.supportsWorldTracking, worldTrackingEnabled {
             config.isWorldTrackingEnabled = true
         }
         config.isLightEstimationEnabled = false
@@ -74,6 +78,8 @@ final class TrueDepthSource: NSObject, DepthFrameSource, ARSessionDelegate {
     }
 
     func setColorCapture(_ enabled: Bool) { wantsColor = enabled }
+
+    func setWorldTracking(_ enabled: Bool) { worldTrackingEnabled = enabled }
 
     func setViewport(_ size: CGSize) {
         guard size.width > 1, size.height > 1 else { return }
