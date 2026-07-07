@@ -112,6 +112,11 @@
   [_impl setValue:@(worldTracking) forKey:@"worldTracking"];
 }
 
+- (void)setDepthOdometry:(BOOL)depthOdometry {
+  _depthOdometry = depthOdometry;
+  [_impl setValue:@(depthOdometry) forKey:@"depthOdometry"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];

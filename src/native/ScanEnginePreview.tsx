@@ -35,6 +35,7 @@ interface ScanEnginePreviewProps {
   sparseEnabled?: boolean; // ブロックスパース統合 ON/OFF
   globalOptimize?: boolean; // 大域最適化(ループ閉じ込み+PGO) 保存時 ON/OFF
   worldTracking?: boolean; // ワールドトラッキング(6DOF姿勢) ON/OFF(開始前に設定)
+  depthOdometry?: boolean; // 深度オドメトリ主軸(ICPをフレーム→モデルの主トラッカーに)
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
   decimateRatio?: number; // 1.0=フル 0.5=半分 0.25=1/4
@@ -68,6 +69,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   sparseEnabled = true,
   globalOptimize = false,
   worldTracking = true,
+  depthOdometry = false,
   exportFormat = 0,
   exportRequest = 0,
   decimateRatio = 1.0,
@@ -95,6 +97,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       sparseEnabled={sparseEnabled}
       globalOptimize={globalOptimize}
       worldTracking={worldTracking}
+      depthOdometry={depthOdometry}
       exportFormat={exportFormat}
       exportRequest={exportRequest}
       decimateRatio={decimateRatio}

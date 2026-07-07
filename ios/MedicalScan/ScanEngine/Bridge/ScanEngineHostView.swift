@@ -117,6 +117,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.worldTrackingEnabled = worldTracking }
     }
 
+    /// 深度オドメトリ主軸の ON/OFF。ON で ICP をフレーム→モデルの主トラッカーにする。既定 OFF。
+    @objc var depthOdometry: Bool = false {
+        didSet { engine?.depthOdometryEnabled = depthOdometry }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。

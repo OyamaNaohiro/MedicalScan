@@ -136,6 +136,14 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// 現在のスキャンモード（対象サイズ別プリセット）。既定は上半身（従来値）。
     private(set) var scanMode: ScanMode = .upperBody
 
+    // 深度オドメトリ主軸（ICP をフレーム→モデルの主トラッカーにし、姿勢を累積する）。
+    /// ON で深度オドメトリを主軸にする（ARKit は相対運動 prior のみ。長期ドリフトから独立）。既定 OFF。
+    var depthOdometryEnabled = false
+    /// 累積トラッキング姿勢（ICP 補正を積む）。
+    private var odomTrackedPose = matrix_identity_float4x4
+    /// ARKit 相対運動 prior 用の前フレーム ARKit 姿勢。
+    private var odomArkitPrev = matrix_identity_float4x4
+
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
 
@@ -208,6 +216,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         }
         currentTracking = .notAvailable   // 再開時は追従が normal になるまで配置・統合しない
         meshFrameCounter = 0
+        odomTrackedPose = matrix_identity_float4x4   // 深度オドメトリの累積姿勢をリセット
+        odomArkitPrev = matrix_identity_float4x4
         keyframeRecorder.reset()          // 大域最適化用キーフレームを破棄（有効時のみ蓄積）
         setState(.starting)
         source.start()
@@ -326,6 +336,52 @@ final class ScanEngine: DepthFrameSourceDelegate {
         return simd_length(tsdf.extent) * 0.5
     }
 
+    // MARK: - 深度オドメトリ主軸トラッカー
+
+    /// ICP をフレーム→モデルの主基準にして姿勢を累積する（ARKit は相対運動 prior のみ）。
+    /// 累積姿勢は ICP 補正を積むため、ARKit の長期ドリフトから独立する。
+    /// - Returns: (統合に使う姿勢, 統合するか)。
+    private func trackDepthOdometry(_ frame: DepthFrame,
+                                    tsdf: TSDFVolume) -> (pose: simd_float4x4, integrate: Bool) {
+        let arkit = frame.cameraToWorld
+
+        // ブートストラップ: 最初のフレームで世界基準を定め、ボリュームを配置して統合。
+        if !tsdf.isPositioned {
+            odomTrackedPose = arkit
+            odomArkitPrev = arkit
+            tsdf.position(frontOf: arkit, distance: (config.depthMin + config.depthMax) * 0.5)
+            return (arkit, true)
+        }
+
+        // 予測: 前トラッキング姿勢に ARKit の相対運動（短期は頑健）を合成。
+        let arkitDelta = odomArkitPrev.inverse * arkit
+        let predicted = odomTrackedPose * arkitDelta
+        odomArkitPrev = arkit
+
+        // ICP をフレーム→モデルで実行（予測を初期値）。
+        let r = icpRefiner.refine(
+            depth: frame.depth, mask: frame.validMask, volume: tsdf,
+            intrinsics: frame.intrinsics, width: frame.width, height: frame.height,
+            vioPose: predicted, config: config, context: context)
+
+        switch r.status {
+        case .ok:
+            // 整合良好 → ICP 補正姿勢を採用（深度が真値）。
+            odomTrackedPose = r.pose
+            DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, true) }
+            return (odomTrackedPose, true)
+        case .aborted:
+            // モデル不足（初期）→ 予測姿勢で統合してモデルを育てる。
+            odomTrackedPose = predicted
+            return (predicted, true)
+        case .poor:
+            // 整合不良 → 予測姿勢は保持するが統合はスキップ（モデル保護）。
+            odomTrackedPose = predicted
+            DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, false) }
+            return (predicted, false)
+        }
+    }
+
     // MARK: - DepthFrameSourceDelegate
 
     func depthFrameSource(_ source: DepthFrameSource, didOutput frame: DepthFrame) {
@@ -340,45 +396,57 @@ final class ScanEngine: DepthFrameSourceDelegate {
         // フィルタチェーン（各フィルタが専用 command buffer で encode/commit）。
         let filtered = filterChain.process(frame, context: context)
 
-        // TSDF 統合（追従が安定しているときだけ。不安定な姿勢での配置・統合を避ける）。
-        if currentTracking == .normal, let tsdf {
-            if !tsdf.isPositioned {
-                tsdf.position(frontOf: frame.cameraToWorld,
-                              distance: (config.depthMin + config.depthMax) * 0.5)
-            }
-
+        // TSDF 統合。姿勢の決め方はモードで分岐し、統合/メッシュ処理は共通化する。
+        if let tsdf {
+            var proceed = false
             var integrateFrame = filtered
             var doIntegrate = true
-            var vioRms: Float = .infinity   // VIO 姿勢での整合残差（ICP 改善判定の基準）
 
-            // 整合ゲート（姿勢は動かさない）＆ ICP 用の基準残差を取得。
-            // 重なりが少ない＝未観測の新領域なので統合（拡張）を許可する。
-            if tsdf.isPositioned, (connectGate || icpEnabled) {
-                let ev = icpRefiner.evaluate(
-                    depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
-                    intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
-                    pose: filtered.cameraToWorld, config: config, context: context)
-                vioRms = ev.rms
-                if connectGate, ev.observed >= config.gateMinOverlap {
-                    let ratio = Float(ev.agree) / Float(ev.observed)
-                    doIntegrate = ratio >= config.gateAgreeRatio
-                    DispatchQueue.main.async { [weak self] in
-                        self?.onICPStats?(ev.rms, ev.agree, doIntegrate)
+            if depthOdometryEnabled {
+                // 深度オドメトリ主軸: ICP をフレーム→モデルの主基準にして姿勢を累積。
+                let (pose, integ) = trackDepthOdometry(filtered, tsdf: tsdf)
+                integrateFrame.cameraToWorld = pose
+                doIntegrate = integ
+                proceed = true
+            } else if currentTracking == .normal {
+                // VIO 主軸（従来）: 追従が安定しているときだけ配置・統合。
+                if !tsdf.isPositioned {
+                    tsdf.position(frontOf: frame.cameraToWorld,
+                                  distance: (config.depthMin + config.depthMax) * 0.5)
+                }
+
+                var vioRms: Float = .infinity   // VIO 姿勢での整合残差（ICP 改善判定の基準）
+
+                // 整合ゲート（姿勢は動かさない）＆ ICP 用の基準残差を取得。
+                if tsdf.isPositioned, (connectGate || icpEnabled) {
+                    let ev = icpRefiner.evaluate(
+                        depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
+                        intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
+                        pose: filtered.cameraToWorld, config: config, context: context)
+                    vioRms = ev.rms
+                    if connectGate, ev.observed >= config.gateMinOverlap {
+                        let ratio = Float(ev.agree) / Float(ev.observed)
+                        doIntegrate = ratio >= config.gateAgreeRatio
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onICPStats?(ev.rms, ev.agree, doIntegrate)
+                        }
                     }
                 }
+
+                // ICP 姿勢補正（任意）: VIO より整合が良くなる時だけ採用。
+                if doIntegrate, icpEnabled, tsdf.isPositioned {
+                    let r = icpRefiner.refine(
+                        depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
+                        intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
+                        vioPose: filtered.cameraToWorld, config: config, context: context)
+                    if r.status == .ok, r.rms < vioRms {
+                        integrateFrame.cameraToWorld = r.pose
+                    }
+                }
+                proceed = true
             }
 
-            // ICP 姿勢補正（任意）: VIO より整合が良くなる時だけ採用＝戻り観測を既存表面へスナップ。
-            // 悪化させないので二重壁を増やさない（完全なループ閉じ込みではないが実用的に寄せる）。
-            if doIntegrate, icpEnabled, tsdf.isPositioned {
-                let r = icpRefiner.refine(
-                    depth: filtered.depth, mask: filtered.validMask, volume: tsdf,
-                    intrinsics: filtered.intrinsics, width: filtered.width, height: filtered.height,
-                    vioPose: filtered.cameraToWorld, config: config, context: context)
-                if r.status == .ok, r.rms < vioRms {
-                    integrateFrame.cameraToWorld = r.pose
-                }
-            }
+            if proceed {
 
             if doIntegrate, let cb = context.commandQueue.makeCommandBuffer() {
                 if sparseEnabled {
@@ -434,6 +502,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
                 }
                 cb.commit()
             }
+            }   // if proceed
         }
 
         // プレビュー/比較へ（描画は View 側の責務）。raw と filtered を渡す。
