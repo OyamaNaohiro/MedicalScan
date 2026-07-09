@@ -32,7 +32,16 @@ struct SparseUniforms {
     float maxWeight;
     float depthMin; float depthMax;
     uint hasMask;
+    uint hasColor;
 };
+
+static float3 unpackColorS(uint c) {
+    return float3(float(c & 0xFFu), float((c >> 8) & 0xFFu), float((c >> 16) & 0xFFu)) / 255.0;
+}
+static uint packColorS(float3 c) {
+    c = clamp(c, 0.0, 1.0) * 255.0;
+    return uint(c.r) | (uint(c.g) << 8) | (uint(c.b) << 16) | 0xFF000000u;
+}
 
 // MARK: - 1) 表面ブロックに印（自ブロック＋6面隣接で truncation 帯を覆う）
 kernel void markBlocksKernel(
@@ -97,12 +106,14 @@ kernel void writeSparseArgsKernel(
 
 // MARK: - 4) active ブロックのみ統合（1 threadgroup = 1 ブロック = 8^3）
 kernel void sparseIntegrateKernel(
-        device TSDFVoxelS*             voxels   [[buffer(0)]],
-        device atomic_uint*            counters [[buffer(1)]],
-        constant SparseUniforms&       u        [[buffer(2)]],
-        device const uint*             activeList [[buffer(3)]],
-        texture2d<float, access::read> depthTex [[texture(0)]],
-        texture2d<float, access::read> maskTex  [[texture(1)]],
+        device TSDFVoxelS*               voxels   [[buffer(0)]],
+        device atomic_uint*              counters [[buffer(1)]],
+        constant SparseUniforms&         u        [[buffer(2)]],
+        device const uint*               activeList [[buffer(3)]],
+        device uint*                     colors   [[buffer(4)]],
+        texture2d<float, access::read>   depthTex [[texture(0)]],
+        texture2d<float, access::read>   maskTex  [[texture(1)]],
+        texture2d<float, access::sample> colorTex [[texture(2)]],
         uint3 blockTG [[threadgroup_position_in_grid]],
         uint3 lid     [[thread_position_in_threadgroup]]) {
 
@@ -137,6 +148,15 @@ kernel void sparseIntegrateKernel(
     float wNew = min(wOld + 1.0, u.maxWeight);
     voxels[idx].distance = (v.distance * wOld + tsdf) / (wOld + 1.0);
     voxels[idx].weight = wNew;
+
+    if (u.hasColor != 0) {
+        constexpr sampler cs(address::clamp_to_edge, filter::linear);
+        float2 uv = float2((float(px) + 0.5) / float(u.depthW),
+                           (float(py) + 0.5) / float(u.depthH));
+        float3 sc = colorTex.sample(cs, uv).rgb;
+        float3 blended = (unpackColorS(colors[idx]) * wOld + sc) / (wOld + 1.0);
+        colors[idx] = packColorS(blended);
+    }
 
     atomic_fetch_add_explicit(&counters[0], 1u, memory_order_relaxed);
     if (wOld == 0.0) atomic_fetch_add_explicit(&counters[1], 1u, memory_order_relaxed);

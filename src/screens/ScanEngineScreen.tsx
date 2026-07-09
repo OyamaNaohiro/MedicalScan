@@ -77,6 +77,7 @@ export default function ScanEngineScreen() {
   const [globalOptimize, setGlobalOptimize] = useState(false);
   const [worldTracking, setWorldTracking] = useState(true);
   const [depthOdometry, setDepthOdometry] = useState(false);
+  const [colorBaking, setColorBaking] = useState(false);
   const [exportFormat, setExportFormat] = useState(0); // 0:binary 1:ascii
   const [exportReq, setExportReq] = useState(0);
   const [decimate, setDecimate] = useState(1.0); // 1=フル 0.5 0.25
@@ -148,6 +149,7 @@ export default function ScanEngineScreen() {
         globalOptimize={globalOptimize}
         worldTracking={worldTracking}
         depthOdometry={depthOdometry}
+        colorBaking={colorBaking}
         exportFormat={exportFormat}
         exportRequest={exportReq}
         decimateRatio={decimate}
@@ -241,6 +243,7 @@ export default function ScanEngineScreen() {
         <FilterChip label="GlobalOpt" on={globalOptimize} onPress={() => setGlobalOptimize(p => !p)} />
         <FilterChip label="World" on={worldTracking} onPress={() => setWorldTracking(p => !p)} />
         <FilterChip label="DepthOdom" on={depthOdometry} onPress={() => setDepthOdometry(p => !p)} />
+        <FilterChip label="Color" on={colorBaking} onPress={() => setColorBaking(p => !p)} />
       </View>
 
       {/* TSDF スライス表示 */}

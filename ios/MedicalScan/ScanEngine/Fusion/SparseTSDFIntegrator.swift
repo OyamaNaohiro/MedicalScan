@@ -28,6 +28,7 @@ final class SparseTSDFIntegrator {
         var maxWeight: Float
         var depthMin: Float; var depthMax: Float
         var hasMask: UInt32
+        var hasColor: UInt32
     }
 
     private let markStride: UInt32 = 1   // 全画素でマーク（被覆漏れ防止）
@@ -62,7 +63,8 @@ final class SparseTSDFIntegrator {
             markStride: markStride,
             truncation: config.truncation, maxWeight: config.maxWeight,
             depthMin: config.depthMin, depthMax: config.depthMax,
-            hasMask: frame.validMask != nil ? 1 : 0)
+            hasMask: frame.validMask != nil ? 1 : 0,
+            hasColor: frame.color != nil ? 1 : 0)
         var blockCountU = UInt32(blockCount)
 
         // 1) markBlocks（深度を間引いて表面ブロックに印）
@@ -111,8 +113,10 @@ final class SparseTSDFIntegrator {
             enc.setBuffer(volume.countersBuffer, offset: 0, index: 1)
             enc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 2)
             enc.setBuffer(volume.activeBlockList, offset: 0, index: 3)
+            enc.setBuffer(volume.colorBuffer, offset: 0, index: 4)
             enc.setTexture(frame.depth, index: 0)
             enc.setTexture(frame.validMask ?? frame.depth, index: 1)
+            enc.setTexture(frame.color ?? frame.depth, index: 2)
             enc.dispatchThreadgroups(indirectBuffer: volume.indirectArgsBuffer,
                                      indirectBufferOffset: 0,
                                      threadsPerThreadgroup: MTLSize(width: 8, height: 8, depth: 8))

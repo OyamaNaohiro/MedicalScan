@@ -91,8 +91,21 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var liveMode = false {
         didSet {
             guard liveMode != oldValue else { return }
-            source.setColorCapture(liveMode)
+            updateColorCapture()
         }
+    }
+
+    /// カラー焼き込みの ON/OFF。ON でカメラ映像をボクセルへ蓄積し、メッシュに頂点カラーを出力する。
+    var colorBakingEnabled = false {
+        didSet {
+            meshExtractor?.colorEnabled = colorBakingEnabled
+            updateColorCapture()
+        }
+    }
+
+    /// カラー取得は「ライブ表示」または「カラー焼き込み」のどちらかが有効なら ON。
+    private func updateColorCapture() {
+        source.setColorCapture(liveMode || colorBakingEnabled)
     }
     /// 表示ビューのサイズ[pt]（ARKit 投影/表示変換に使用）。
     var previewViewport: CGSize = .zero {

@@ -27,18 +27,30 @@ struct TSDFUniforms {
     float maxWeight;           // 重みクランプ
     float depthMin; float depthMax;
     uint  hasMask;             // validMask が有効か
+    uint  hasColor;            // カラー焼き込みが有効か
 };
+
+// RGBA8 packed(uint) ↔ float3 のヘルパー（カラー焼き込み用）。
+static float3 unpackColor(uint c) {
+    return float3(float(c & 0xFFu), float((c >> 8) & 0xFFu), float((c >> 16) & 0xFFu)) / 255.0;
+}
+static uint packColor(float3 c) {
+    c = clamp(c, 0.0, 1.0) * 255.0;
+    return uint(c.r) | (uint(c.g) << 8) | (uint(c.b) << 16) | 0xFF000000u;
+}
 
 // 符号付き距離: sdf = 計測深度 - ボクセル深度。
 //   sdf > 0 : 表面より手前（空き空間）→ +側
 //   sdf < 0 : 表面より奥（occlusion）。-truncation より奥は更新しない
 // 正規化 tsdf = min(1, sdf/trunc)。重み付き移動平均で統合する。
 kernel void tsdfIntegrateKernel(
-        device TSDFVoxel*               voxels   [[buffer(0)]],
-        device atomic_uint*             counters [[buffer(1)]],  // [0]=updated(毎フレーム), [1]=activeTotal
-        constant TSDFUniforms&          u        [[buffer(2)]],
-        texture2d<float, access::read>  depthTex [[texture(0)]],
-        texture2d<float, access::read>  maskTex  [[texture(1)]],
+        device TSDFVoxel*                 voxels   [[buffer(0)]],
+        device atomic_uint*               counters [[buffer(1)]],  // [0]=updated(毎フレーム), [1]=activeTotal
+        constant TSDFUniforms&            u        [[buffer(2)]],
+        device uint*                      colors   [[buffer(3)]],  // RGBA8 packed / voxel
+        texture2d<float, access::read>    depthTex [[texture(0)]],
+        texture2d<float, access::read>    maskTex  [[texture(1)]],
+        texture2d<float, access::sample>  colorTex [[texture(2)]],
         uint3 gid [[thread_position_in_grid]]) {
 
     if (int(gid.x) >= u.dimX || int(gid.y) >= u.dimY || int(gid.z) >= u.dimZ) return;
@@ -70,6 +82,16 @@ kernel void tsdfIntegrateKernel(
     float wNew = min(wOld + 1.0, u.maxWeight);
     voxels[idx].distance = (v.distance * wOld + tsdf) / (wOld + 1.0);
     voxels[idx].weight = wNew;
+
+    // カラー焼き込み: カメラ映像を正規化座標でサンプルし重み付き移動平均。
+    if (u.hasColor != 0) {
+        constexpr sampler cs(address::clamp_to_edge, filter::linear);
+        float2 uv = float2((float(px) + 0.5) / float(u.depthW),
+                           (float(py) + 0.5) / float(u.depthH));
+        float3 sc = colorTex.sample(cs, uv).rgb;
+        float3 blended = (unpackColor(colors[idx]) * wOld + sc) / (wOld + 1.0);
+        colors[idx] = packColor(blended);
+    }
 
     atomic_fetch_add_explicit(&counters[0], 1u, memory_order_relaxed);     // updated this frame
     if (wOld == 0.0) {

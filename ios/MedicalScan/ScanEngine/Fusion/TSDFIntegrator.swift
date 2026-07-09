@@ -24,6 +24,7 @@ final class TSDFIntegrator {
         var maxWeight: Float
         var depthMin: Float; var depthMax: Float
         var hasMask: UInt32
+        var hasColor: UInt32
     }
 
     /// DepthFrame をボリュームへ統合（与えられた commandBuffer に encode）。
@@ -49,14 +50,17 @@ final class TSDFIntegrator {
             depthW: UInt32(frame.width), depthH: UInt32(frame.height),
             truncation: config.truncation, maxWeight: config.maxWeight,
             depthMin: config.depthMin, depthMax: config.depthMax,
-            hasMask: frame.validMask != nil ? 1 : 0)
+            hasMask: frame.validMask != nil ? 1 : 0,
+            hasColor: frame.color != nil ? 1 : 0)
 
         encoder.setComputePipelineState(pso)
         encoder.setBuffer(volume.voxelBuffer, offset: 0, index: 0)
         encoder.setBuffer(volume.countersBuffer, offset: 0, index: 1)
         encoder.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 2)
+        encoder.setBuffer(volume.colorBuffer, offset: 0, index: 3)
         encoder.setTexture(frame.depth, index: 0)
         encoder.setTexture(frame.validMask ?? frame.depth, index: 1)
+        encoder.setTexture(frame.color ?? frame.depth, index: 2)
 
         // 3D ディスパッチ（1 voxel = 1 thread）。8x8x8 スレッドグループ。
         let tg = MTLSize(width: 8, height: 8, depth: 8)

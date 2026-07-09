@@ -29,6 +29,8 @@ final class TSDFVolume {
 
     /// distance/weight を保持する GPU バッファ（private）。
     let voxelBuffer: MTLBuffer
+    /// ボクセルごとのカラー（RGBA8 packed uint, R=下位バイト）。カラー焼き込み用（private）。
+    let colorBuffer: MTLBuffer
     /// [0]=updated(毎フレーム), [1]=activeTotal（CPU が metrics 用に読む, shared）。
     let countersBuffer: MTLBuffer
 
@@ -62,6 +64,7 @@ final class TSDFVolume {
 
         guard let vb = device.makeBuffer(length: count * Self.voxelStride,
                                          options: .storageModePrivate),
+              let colorB = device.makeBuffer(length: count * 4, options: .storageModePrivate),
               let cb = device.makeBuffer(length: 16, options: .storageModeShared),
               let bf = device.makeBuffer(length: blockN * 4, options: .storageModePrivate),
               let al = device.makeBuffer(length: blockN * 4, options: .storageModePrivate),
@@ -73,12 +76,14 @@ final class TSDFVolume {
         self.blocksDim = SIMD3(Int32(bx), Int32(by), Int32(bz))
         self.voxelSize = voxelSize
         self.voxelBuffer = vb
+        self.colorBuffer = colorB
         self.countersBuffer = cb
         self.blockFlags = bf
         self.activeBlockList = al
         self.activeCountBuffer = ac
         self.indirectArgsBuffer = ia
         vb.label = "TSDF.voxels"
+        colorB.label = "TSDF.colors"
         cb.label = "TSDF.counters"
         bf.label = "TSDF.blockFlags"
     }
@@ -100,6 +105,7 @@ final class TSDFVolume {
     func clear(commandBuffer: MTLCommandBuffer) {
         guard let blit = commandBuffer.makeBlitCommandEncoder() else { return }
         blit.fill(buffer: voxelBuffer, range: 0..<byteCount, value: 0)
+        blit.fill(buffer: colorBuffer, range: 0..<(voxelCount * 4), value: 0)
         blit.fill(buffer: countersBuffer, range: 0..<16, value: 0)
         blit.endEncoding()
         isPositioned = false

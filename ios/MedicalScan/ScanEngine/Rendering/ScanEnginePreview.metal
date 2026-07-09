@@ -25,11 +25,13 @@ struct VertexOut {
 struct MeshVertexIn {
     float4 position;   // MCVertex と一致（xyz, w=1）
     float4 normal;     // xyz, w=0
+    float4 color;      // rgb, a=1(色あり)/0(色なし)
 };
 
 struct MeshVOut {
     float4 position [[position]];
     float3 normal;
+    float4 color;
 };
 
 vertex MeshVOut meshVertex(uint vid [[vertex_id]],
@@ -38,6 +40,7 @@ vertex MeshVOut meshVertex(uint vid [[vertex_id]],
     MeshVOut o;
     o.position = mvp * float4(verts[vid].position.xyz, 1.0);
     o.normal = verts[vid].normal.xyz;
+    o.color = verts[vid].color;
     return o;
 }
 
@@ -46,7 +49,9 @@ fragment float4 meshFragment(MeshVOut in [[stage_in]]) {
     float3 L = normalize(float3(0.4, 0.7, 0.6));
     // 両面ライティング（vertex soup の向き不定に対応）。
     float diff = abs(dot(n, L)) * 0.8 + 0.2;
-    return float4(float3(0.70, 0.76, 0.85) * diff, 1.0);
+    // 頂点カラーがあれば実カラー、無ければ従来のグレー。
+    float3 base = (in.color.a > 0.5) ? in.color.rgb : float3(0.70, 0.76, 0.85);
+    return float4(base * diff, 1.0);
 }
 
 // MARK: - カメラ映像（AR オーバーレイ背景）

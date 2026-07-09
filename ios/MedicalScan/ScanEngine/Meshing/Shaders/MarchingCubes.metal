@@ -16,6 +16,7 @@ struct TSDFVoxel { float distance; float weight; };
 struct MCVertex {
     float4 position;  // xyz, w=1
     float4 normal;    // xyz, w=0
+    float4 color;     // rgb, a=1(色あり)/0(色なし→グレー表示)
 };
 
 struct MCUniforms {
@@ -25,6 +26,7 @@ struct MCUniforms {
     float iso;
     float minWeight;
     uint  maxVerts;
+    uint  hasColor;   // カラー焼き込みが有効か
 };
 
 constant int3 kCornerOffset[8] = {
@@ -49,6 +51,16 @@ static float3 gradAt(device const TSDFVoxel* v, int3 c, constant MCUniforms& u) 
                   sdfAt(v, c.x, c.y, c.z + 1, u) - sdfAt(v, c.x, c.y, c.z - 1, u));
 }
 
+// ボクセルカラー（RGBA8 packed）を float3 で読む。
+static float3 colorAt(device const uint* colors, int3 c, constant MCUniforms& u) {
+    int x = clamp(c.x, 0, u.dimX - 1);
+    int y = clamp(c.y, 0, u.dimY - 1);
+    int z = clamp(c.z, 0, u.dimZ - 1);
+    uint packed = colors[(uint(z) * uint(u.dimY) + uint(y)) * uint(u.dimX) + uint(x)];
+    return float3(float(packed & 0xFFu), float((packed >> 8) & 0xFFu),
+                  float((packed >> 16) & 0xFFu)) / 255.0;
+}
+
 // float を順序保存 uint へ（atomic min/max でバウンディング計算）。
 static uint floatFlip(float f) {
     uint u = as_type<uint>(f);
@@ -71,6 +83,7 @@ kernel void marchingCubesKernel(
         device atomic_uint*      counter  [[buffer(3)]],
         constant MCUniforms&     u        [[buffer(4)]],
         device atomic_uint*      bounds   [[buffer(5)]],
+        device const uint*       colors   [[buffer(6)]],
         uint3 gid [[thread_position_in_grid]]) {
 
     if (int(gid.x) >= u.dimX - 1 || int(gid.y) >= u.dimY - 1 || int(gid.z) >= u.dimZ - 1) return;
@@ -92,8 +105,14 @@ kernel void marchingCubesKernel(
     float3 grad[8];
     for (int i = 0; i < 8; i++) grad[i] = gradAt(voxels, int3(gid) + kCornerOffset[i], u);
 
+    // 8 角のカラー（焼き込み有効時のみ）。
+    float3 col[8];
+    if (u.hasColor != 0)
+        for (int i = 0; i < 8; i++) col[i] = colorAt(colors, int3(gid) + kCornerOffset[i], u);
+
     float3 edgePos[12];
     float3 edgeNrm[12];
+    float3 edgeCol[12];
     for (int e = 0; e < 12; e++) {
         int a = kEdgeA[e], b = kEdgeB[e];
         bool ina = val[a] < u.iso, inb = val[b] < u.iso;
@@ -104,6 +123,7 @@ kernel void marchingCubesKernel(
             float3 pb = float3(u.ox, u.oy, u.oz) + (float3(gid) + float3(kCornerOffset[b])) * u.voxelSize;
             edgePos[e] = mix(pa, pb, t);
             edgeNrm[e] = mix(grad[a], grad[b], t);
+            if (u.hasColor != 0) edgeCol[e] = mix(col[a], col[b], t);
         }
     }
 
@@ -121,12 +141,17 @@ kernel void marchingCubesKernel(
         float3 n1 = (length(edgeNrm[e1]) > 1e-6) ? normalize(edgeNrm[e1]) : faceN;
         float3 n2 = (length(edgeNrm[e2]) > 1e-6) ? normalize(edgeNrm[e2]) : faceN;
 
+        // 頂点カラー（焼き込み有効時は a=1、無効時は a=0＝レンダラでグレー表示）。
+        float4 c0 = (u.hasColor != 0) ? float4(edgeCol[e0], 1.0) : float4(0.0);
+        float4 c1 = (u.hasColor != 0) ? float4(edgeCol[e1], 1.0) : float4(0.0);
+        float4 c2 = (u.hasColor != 0) ? float4(edgeCol[e2], 1.0) : float4(0.0);
+
         uint base = atomic_fetch_add_explicit(counter, 3u, memory_order_relaxed);
         if (base + 3 > u.maxVerts) return;
         // 巻き順を反転（v0, v2, v1）して面法線を外向きにする（STL の表裏を正す）。
-        outVerts[base]     = MCVertex{ float4(v0, 1.0), float4(n0, 0.0) };
-        outVerts[base + 1] = MCVertex{ float4(v2, 1.0), float4(n2, 0.0) };
-        outVerts[base + 2] = MCVertex{ float4(v1, 1.0), float4(n1, 0.0) };
+        outVerts[base]     = MCVertex{ float4(v0, 1.0), float4(n0, 0.0), c0 };
+        outVerts[base + 1] = MCVertex{ float4(v2, 1.0), float4(n2, 0.0), c2 };
+        outVerts[base + 2] = MCVertex{ float4(v1, 1.0), float4(n1, 0.0), c1 };
 
         updateBounds(bounds, v0);
         updateBounds(bounds, v1);

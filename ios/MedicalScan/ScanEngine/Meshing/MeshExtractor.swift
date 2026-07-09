@@ -38,7 +38,11 @@ final class MarchingCubesExtractor: MeshExtractor {
         var iso: Float
         var minWeight: Float
         var maxVerts: UInt32
+        var hasColor: UInt32
     }
+
+    /// カラー焼き込みを頂点カラーとして出力するか（ScanEngine が設定）。
+    var colorEnabled = false
 
     private let triTableBuffer: MTLBuffer
     private let vertexBuffer: MTLBuffer
@@ -50,7 +54,8 @@ final class MarchingCubesExtractor: MeshExtractor {
     init?(device: MTLDevice, maxTriangles: Int = 500_000) {
         self.maxVerts = maxTriangles * 3
         guard let tt = MarchingCubesExtractor.makeTriTableBuffer(device: device),
-              let vb = device.makeBuffer(length: maxVerts * MemoryLayout<SIMD4<Float>>.stride * 2,
+              // MCVertex = position + normal + color = 3× float4 = 48B/頂点。
+              let vb = device.makeBuffer(length: maxVerts * MemoryLayout<SIMD4<Float>>.stride * 3,
                                          options: .storageModePrivate),
               let cb = device.makeBuffer(length: 4, options: .storageModeShared),
               let bb = device.makeBuffer(length: 24, options: .storageModeShared) else {
@@ -79,7 +84,8 @@ final class MarchingCubesExtractor: MeshExtractor {
         var u = Uniforms(dimX: volume.dims.x, dimY: volume.dims.y, dimZ: volume.dims.z,
                          ox: volume.origin.x, oy: volume.origin.y, oz: volume.origin.z,
                          voxelSize: volume.voxelSize, iso: 0,
-                         minWeight: config.meshMinWeight, maxVerts: UInt32(maxVerts))
+                         minWeight: config.meshMinWeight, maxVerts: UInt32(maxVerts),
+                         hasColor: colorEnabled ? 1 : 0)
 
         encoder.setComputePipelineState(pso)
         encoder.setBuffer(sourceBuffer, offset: 0, index: 0)   // master か平滑化済みバッファ
@@ -88,6 +94,7 @@ final class MarchingCubesExtractor: MeshExtractor {
         encoder.setBuffer(counterBuffer, offset: 0, index: 3)
         encoder.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 4)
         encoder.setBuffer(boundsBuffer, offset: 0, index: 5)
+        encoder.setBuffer(volume.colorBuffer, offset: 0, index: 6)
 
         let tg = MTLSize(width: 4, height: 4, depth: 4)
         let groups = MTLSize(width: (Int(volume.dims.x) + 3) / 4,
@@ -129,26 +136,37 @@ final class MarchingCubesExtractor: MeshExtractor {
     /// GPU 頂点バッファ（private）を CPU へ読み戻し、頂点位置列（vertex soup）を返す。
     /// エクスポート専用。blit→待機するためバックグラウンドで呼ぶこと。
     func readbackPositions(context: MetalContext) -> [SIMD3<Float>] {
+        readbackMesh(context: context).positions
+    }
+
+    /// GPU 頂点バッファを CPU へ読み戻し、頂点位置と頂点カラーを返す（エクスポート専用）。
+    /// カラー未焼き込み（a=0）の頂点は colors 側で (-1,-1,-1) にする（呼び出し側が無色と判定できる）。
+    func readbackMesh(context: MetalContext) -> (positions: [SIMD3<Float>], colors: [SIMD3<Float>]) {
         let count = readVertexCount()
-        guard count > 0 else { return [] }
-        let bytes = count * MemoryLayout<SIMD4<Float>>.stride * 2   // MCVertex = pos float4 + normal float4
+        guard count > 0 else { return ([], []) }
+        // MCVertex = pos float4 + normal float4 + color float4 = 12 Float / 頂点。
+        let floatsPerVertex = 12
+        let bytes = count * MemoryLayout<SIMD4<Float>>.stride * 3
         guard let staging = context.device.makeBuffer(length: bytes, options: .storageModeShared),
               let cb = context.commandQueue.makeCommandBuffer(),
-              let blit = cb.makeBlitCommandEncoder() else { return [] }
+              let blit = cb.makeBlitCommandEncoder() else { return ([], []) }
         blit.copy(from: vertexBuffer, sourceOffset: 0, to: staging, destinationOffset: 0, size: bytes)
         blit.endEncoding()
         cb.commit()
         cb.waitUntilCompleted()
 
-        // MCVertex は 8 個の Float（pos.xyzw, normal.xyzw）。pos.xyz のみ取り出す。
-        let ptr = staging.contents().bindMemory(to: Float.self, capacity: count * 8)
-        var positions = [SIMD3<Float>]()
-        positions.reserveCapacity(count)
+        let ptr = staging.contents().bindMemory(to: Float.self, capacity: count * floatsPerVertex)
+        var positions = [SIMD3<Float>](); positions.reserveCapacity(count)
+        var colors = [SIMD3<Float>](); colors.reserveCapacity(count)
         for i in 0..<count {
-            let b = i * 8
+            let b = i * floatsPerVertex
             positions.append(SIMD3<Float>(ptr[b], ptr[b + 1], ptr[b + 2]))
+            // color は [b+8..b+11]（rgb, a）。a<=0 は無色。
+            let a = ptr[b + 11]
+            colors.append(a > 0.5 ? SIMD3<Float>(ptr[b + 8], ptr[b + 9], ptr[b + 10])
+                                  : SIMD3<Float>(-1, -1, -1))
         }
-        return positions
+        return (positions, colors)
     }
 
     // MARK: - Marching Cubes 三角形テーブル（標準 Bourke。LiDAR 実装と同一）

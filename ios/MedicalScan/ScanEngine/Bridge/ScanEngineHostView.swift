@@ -122,6 +122,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.depthOdometryEnabled = depthOdometry }
     }
 
+    /// カラー焼き込みの ON/OFF。ON でカメラ映像をメッシュに頂点カラーとして焼き込む。既定 OFF。
+    @objc var colorBaking: Bool = false {
+        didSet { engine?.colorBakingEnabled = colorBaking }
+    }
+
     /// STL 形式。0:binary 1:ascii。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。

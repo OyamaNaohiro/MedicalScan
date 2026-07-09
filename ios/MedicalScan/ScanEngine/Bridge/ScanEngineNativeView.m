@@ -117,6 +117,11 @@
   [_impl setValue:@(depthOdometry) forKey:@"depthOdometry"];
 }
 
+- (void)setColorBaking:(BOOL)colorBaking {
+  _colorBaking = colorBaking;
+  [_impl setValue:@(colorBaking) forKey:@"colorBaking"];
+}
+
 - (void)setExportFormat:(NSInteger)exportFormat {
   _exportFormat = exportFormat;
   [_impl setValue:@(exportFormat) forKey:@"exportFormat"];
