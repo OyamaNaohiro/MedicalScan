@@ -34,7 +34,7 @@ export default function FilesScreen() {
       const documentsPath = RNFS.DocumentDirectoryPath;
       const items = await RNFS.readDir(documentsPath);
       const stlFiles = items
-        .filter(item => item.name.endsWith('.stl'))
+        .filter(item => item.name.endsWith('.stl') || item.name.endsWith('.ply'))
         .map(item => ({
           name: item.name,
           path: item.path,
@@ -83,7 +83,9 @@ export default function FilesScreen() {
         subject: `STLscan - ${file.name}`,
         message: `3Dスキャンデータ「${file.name}」を送信します。`,
         url: `file://${file.path}`,
-        type: 'application/sla',
+        type: file.name.endsWith('.ply')
+          ? 'application/octet-stream'
+          : 'application/sla',
         email: savedEmail || undefined,
       });
     } catch (error: any) {
@@ -143,9 +145,9 @@ export default function FilesScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {files.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>保存されたSTLファイルはありません</Text>
+          <Text style={styles.emptyText}>保存されたファイルはありません</Text>
           <Text style={styles.emptySubtext}>
-            スキャン画面でスキャンしてSTLを保存してください
+            スキャン画面でスキャンして STL / PLY を保存してください
           </Text>
         </View>
       ) : (
