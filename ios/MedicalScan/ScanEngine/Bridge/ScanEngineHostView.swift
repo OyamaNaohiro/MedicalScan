@@ -127,7 +127,7 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.colorBakingEnabled = colorBaking }
     }
 
-    /// STL 形式。0:binary 1:ascii。
+    /// エクスポート形式。0:STL binary 1:STL ascii 2:PLY(カラー付き)。
     @objc var exportFormat: Int = 0
     /// エクスポート時の三角形削減率（1.0=フル, 0.5=半分, 0.25=1/4）。
     @objc var decimateRatio: Double = 1.0 {
@@ -137,12 +137,12 @@ final class ScanEngineHostView: UIView {
     @objc var exportRequest: Double = 0 {
         didSet {
             guard exportRequest > 0, exportRequest != oldValue, let engine else { return }
-            let binary = exportFormat == 0
+            let fmt = exportFormat
             let ts = Int(exportRequest)
             let globalOpt = globalOptimize
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let url = engine.exportSTL(binary: binary, filename: "scan_\(ts)",
-                                           globalOptimize: globalOpt)
+                let url = engine.exportMesh(format: fmt, filename: "scan_\(ts)",
+                                            globalOptimize: globalOpt)
                 DispatchQueue.main.async {
                     if let url {
                         ScanEventEmitter.emitEvent(["type": "exported", "path": url.path])

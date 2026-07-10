@@ -293,41 +293,60 @@ final class ScanEngine: DepthFrameSourceDelegate {
         meshExtractor?.readBounds()
     }
 
-    /// 現在のメッシュを STL 化してドキュメントへ保存し、URL を返す（同期・要バックグラウンド）。
-    /// エクスポートパイプライン（後処理）はここに差し込む（Phase 7b）。
-    /// - Parameter globalOptimize: true かつキーフレームがあれば、大域最適化（ループ閉じ込み+PGO）
-    ///   → TSDF 再統合 → 再メッシュで頂点を作り直してから後処理する（エクスポート専用）。
-    func exportSTL(binary: Bool, filename: String, globalOptimize: Bool = false) -> URL? {
+    /// 現在のメッシュをファイル化してドキュメントへ保存し、URL を返す（同期・要バックグラウンド）。
+    /// - Parameters:
+    ///   - format: 0=STL binary, 1=STL ascii, 2=PLY(binary・頂点カラー付き)
+    ///   - globalOptimize: true かつキーフレームがあれば大域最適化→再統合→再メッシュしてから後処理。
+    func exportMesh(format: Int, filename: String, globalOptimize: Bool = false) -> URL? {
         guard let extractor = meshExtractor else { return nil }
+        let ply = (format == 2)
+        let binary = (format != 1)   // STL ascii のみ非バイナリ
 
-        // 頂点スープの取得元を選ぶ。大域最適化 ON なら再生成、それ以外は現在のメッシュ。
+        // 頂点（位置＋カラー）の取得元。大域最適化 ON なら再生成、それ以外は現在のメッシュ。
         var soup: [SIMD3<Float>]
+        var soupColors: [SIMD3<Float>]
         if globalOptimize, keyframeRecorder.store.count >= 2,
            let regenerated = globalOptPipeline.run(frames: keyframeRecorder.store.snapshot(),
                                                     config: config, gConfig: globalOptConfig,
                                                     context: context) {
             soup = regenerated.positions
+            soupColors = regenerated.colors   // 再メッシュは現状無色
             let s = globalOptPipeline.lastStats
             DispatchQueue.main.async { [weak self] in
                 self?.onEvent?("globalOpt",
                     "大域最適化: KF \(s.keyframes) / ループ候補 \(s.loopCandidates) / 補正 \(s.correctionApplied ? "有" : "無") / 三角形 \(s.triangles)")
             }
         } else {
-            soup = extractor.readbackPositions(context: context)
+            let m = extractor.readbackMesh(context: context)
+            soup = m.positions
+            soupColors = m.colors
         }
         guard soup.count >= 3 else { return nil }
 
-        // エクスポート後処理（Weld→Taubin→QEM）。削減率を反映してから走らせる。
+        // 無色センチネル(負値)はグレーへ寄せてから後処理（溶接の色平均が壊れないように）。
+        let gray = SIMD3<Float>(0.7, 0.76, 0.85)
+        let colors: [SIMD3<Float>] = soupColors.count == soup.count
+            ? soupColors.map { $0.x < 0 ? gray : $0 } : []
+
+        // エクスポート後処理（Weld→HoleFilling→Taubin→QEM）。カラーも段を通して引き継がれる。
         decimator.targetRatio = exportDecimateRatio
-        let processed = exportPipeline.run(CPUMesh(positions: soup, normals: [], indices: []))
-        // インデックス付きなら三角形列へ展開、無ければ soup のまま。
-        let outPositions: [SIMD3<Float>] = processed.indices.isEmpty
-            ? processed.positions
-            : processed.indices.map { processed.positions[Int($0)] }
-        let data = STLExporter.data(positions: outPositions, binary: binary)
+        let processed = exportPipeline.run(CPUMesh(positions: soup, normals: [],
+                                                   colors: colors, indices: []))
+
+        let ext = ply ? "ply" : "stl"
+        let data: Data
+        if ply {
+            data = PLYExporter.data(positions: processed.positions, colors: processed.colors,
+                                    indices: processed.indices, binary: true)
+        } else {
+            let outPositions: [SIMD3<Float>] = processed.indices.isEmpty
+                ? processed.positions
+                : processed.indices.map { processed.positions[Int($0)] }
+            data = STLExporter.data(positions: outPositions, binary: binary)
+        }
 
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let name = filename.hasSuffix(".stl") ? filename : "\(filename).stl"
+        let name = filename.hasSuffix(".\(ext)") ? filename : "\(filename).\(ext)"
         let url = docs.appendingPathComponent(name)
         do {
             try data.write(to: url)

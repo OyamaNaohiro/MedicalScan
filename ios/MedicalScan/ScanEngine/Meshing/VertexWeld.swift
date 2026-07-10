@@ -32,22 +32,31 @@ final class VertexWeld: MeshPostProcessor {
                          Int32((p.z / quantum).rounded()))
         }
 
+        let hasColor = mesh.hasColor
         var map = [SIMD3<Int32>: UInt32]()
         map.reserveCapacity(mesh.positions.count / 2)
         var newPositions = [SIMD3<Float>]()
         var remap = [UInt32](repeating: 0, count: mesh.positions.count)
+        // カラーは溶接された頂点間で平均する（合計と個数を溜めて後で割る）。
+        var colorSum = [SIMD3<Float>]()
+        var colorCnt = [Float]()
 
         for (i, p) in mesh.positions.enumerated() {
             let k = key(p)
             if let idx = map[k] {
                 remap[i] = idx
+                if hasColor { colorSum[Int(idx)] += mesh.colors[i]; colorCnt[Int(idx)] += 1 }
             } else {
                 let idx = UInt32(newPositions.count)
                 map[k] = idx
                 newPositions.append(p)
                 remap[i] = idx
+                if hasColor { colorSum.append(mesh.colors[i]); colorCnt.append(1) }
             }
         }
+        let newColors: [SIMD3<Float>] = hasColor
+            ? zip(colorSum, colorCnt).map { $0 / max(1, $1) }
+            : []
 
         // インデックスを張り替え、溶接で潰れた三角形は除去。
         var newIndices = [UInt32]()
@@ -62,6 +71,6 @@ final class VertexWeld: MeshPostProcessor {
             newIndices.append(a); newIndices.append(b); newIndices.append(c)
         }
 
-        return CPUMesh(positions: newPositions, normals: [], indices: newIndices)
+        return CPUMesh(positions: newPositions, normals: [], colors: newColors, indices: newIndices)
     }
 }

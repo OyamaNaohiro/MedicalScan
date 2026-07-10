@@ -337,7 +337,7 @@ export default function ScanEngineScreen() {
       {/* STL 保存 */}
       <View style={styles.filterRow}>
         <FilterChip
-          label="Bin"
+          label="STL"
           on={exportFormat === 0}
           onPress={() => setExportFormat(0)}
         />
@@ -346,10 +346,17 @@ export default function ScanEngineScreen() {
           on={exportFormat === 1}
           onPress={() => setExportFormat(1)}
         />
+        <FilterChip
+          label="PLY色"
+          on={exportFormat === 2}
+          onPress={() => setExportFormat(2)}
+        />
         <TouchableOpacity
           style={styles.saveButton}
           onPress={() => setExportReq(Date.now())}>
-          <Text style={styles.saveButtonText}>STL保存</Text>
+          <Text style={styles.saveButtonText}>
+            {exportFormat === 2 ? 'PLY保存' : 'STL保存'}
+          </Text>
         </TouchableOpacity>
       </View>
 

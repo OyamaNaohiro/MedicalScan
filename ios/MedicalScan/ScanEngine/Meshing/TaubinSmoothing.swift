@@ -73,6 +73,7 @@ final class TaubinSmoothing: MeshPostProcessor {
             if l > 1e-12 { normals[i] /= l }
         }
 
-        return CPUMesh(positions: pos, normals: normals, indices: mesh.indices)
+        // カラーは頂点順・数を保つのでそのまま引き継ぐ。
+        return CPUMesh(positions: pos, normals: normals, colors: mesh.colors, indices: mesh.indices)
     }
 }

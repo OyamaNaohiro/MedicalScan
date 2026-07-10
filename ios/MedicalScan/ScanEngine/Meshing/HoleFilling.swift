@@ -53,7 +53,9 @@ final class HoleFilling: MeshPostProcessor {
         guard !nextOf.isEmpty else { return mesh }
 
         // 3) ループを辿り、小さな穴を重心ファンで塞ぐ。
+        let hasColor = mesh.hasColor
         var positions = mesh.positions
+        var colors = mesh.colors
         var newIndices = mesh.indices
         var visited = Set<UInt32>()
         var filled = 0
@@ -83,6 +85,11 @@ final class HoleFilling: MeshPostProcessor {
             centroid /= Float(loop.count)
             let cIdx = UInt32(positions.count)
             positions.append(centroid)
+            if hasColor {
+                var cc = SIMD3<Float>(repeating: 0)
+                for v in loop { cc += colors[Int(v)] }
+                colors.append(cc / Float(loop.count))
+            }
 
             for k in 0..<loop.count {
                 let u = loop[k]
@@ -94,6 +101,6 @@ final class HoleFilling: MeshPostProcessor {
         }
 
         guard filled > 0 else { return mesh }
-        return CPUMesh(positions: positions, normals: [], indices: newIndices)
+        return CPUMesh(positions: positions, normals: [], colors: colors, indices: newIndices)
     }
 }

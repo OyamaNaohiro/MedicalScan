@@ -129,12 +129,16 @@ final class QEMDecimation: MeshPostProcessor {
         }
 
         // 4. 再構築（root をコンパクト化、退化三角形除去、法線再計算）。
+        let hasColor = mesh.hasColor
         var rootRemap = [Int: UInt32]()
         var newPos = [SIMD3<Float>]()
+        var newColors = [SIMD3<Float>]()
         func mapped(_ x: Int) -> UInt32 {
             let r = find(x)
             if let m = rootRemap[r] { return m }
-            let m = UInt32(newPos.count); rootRemap[r] = m; newPos.append(pos[r]); return m
+            let m = UInt32(newPos.count); rootRemap[r] = m; newPos.append(pos[r])
+            if hasColor { newColors.append(mesh.colors[r]) }   // root 頂点の色を代表色に
+            return m
         }
         var newIdx = [UInt32]()
         t = 0
@@ -156,6 +160,6 @@ final class QEMDecimation: MeshPostProcessor {
             if l > 1e-12 { normals[k] /= l }
         }
 
-        return CPUMesh(positions: newPos, normals: normals, indices: newIdx)
+        return CPUMesh(positions: newPos, normals: normals, colors: newColors, indices: newIdx)
     }
 }

@@ -25,16 +25,22 @@ import simd
 struct CPUMesh {
     var positions: [SIMD3<Float>]
     var normals: [SIMD3<Float>]
+    /// 頂点カラー（RGB 0..1）。positions と同数なら有効、空なら無色。
+    var colors: [SIMD3<Float>]
     var indices: [UInt32]
 
-    init(positions: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = [], indices: [UInt32] = []) {
+    init(positions: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = [],
+         colors: [SIMD3<Float>] = [], indices: [UInt32] = []) {
         self.positions = positions
         self.normals = normals
+        self.colors = colors
         self.indices = indices
     }
 
     var triangleCount: Int { indices.count / 3 }
     var isEmpty: Bool { positions.isEmpty || indices.isEmpty }
+    /// カラーが位置と整合しているか（後処理が引き継いだか）。
+    var hasColor: Bool { !colors.isEmpty && colors.count == positions.count }
 }
 
 /// エクスポート時のメッシュ後処理 1 段。Phase 7 以降で具体実装を追加する拡張点。
