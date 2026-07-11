@@ -43,9 +43,11 @@ enum ScanMode: Int {
             c.volumeExtent = [0.3, 0.3, 0.3]     // 200^3 ≈ 800万ボクセル（≈64MB）
             c.depthMin = 0.15
             c.depthMax = 0.45
-            // 1mm はノイズ床(~0.5-1mm)とほぼ同寸でモデルが荒れやすく、×4(4mm)だと ICP 対応バンドが
-            // 狭く追従が不安定になる。手だけ ×6 に広げてブートストラップの荒れに頑健化する。
-            c.truncationScale = 6
+            // truncation を絞って指の間の帯の重なり（癒着）を防ぐ。×6(9mm)は広すぎ、×3(4.5mm)へ。
+            // 1.5mm はノイズ床より大きくモデルが安定するため、帯を狭めても追従は維持できる。
+            c.truncationScale = 3
+            // 指の隙間を穴埋めで塞がないよう、穴埋めの発動を厳しくする（16→22）。
+            c.sdfHoleFillMinNeighbors = 22
         case .foot:
             c.voxelSize = 0.002                  // 2.0mm
             c.volumeExtent = [0.5, 0.5, 0.5]     // 250^3 ≈ 1560万ボクセル
