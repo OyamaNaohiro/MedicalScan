@@ -56,6 +56,9 @@ final class TemporalFilter: DepthFilter {
         self.baseAlpha = config.temporalAlpha
     }
 
+    /// モード切替で temporalAlpha が変わったら反映する。
+    func updateConfig(_ config: ScanConfig) { baseAlpha = config.temporalAlpha }
+
     func reset() {
         hasHistory = false
         prevPose = nil
