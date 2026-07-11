@@ -48,8 +48,9 @@ const DIST_STYLE: {[k in DistState]: {color: string; label: string}} = {
 
 export default function ScanSessionScreen() {
   const [scanMode, setScanMode] = useState<ScanMode>(ScanMode.Hand);
-  const [isScanning, setIsScanning] = useState(false);
-  const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(カメラ視点)
+  const [inSession, setInSession] = useState(false); // false:モード選択 true:スキャン画面
+  const [isScanning, setIsScanning] = useState(false); // 実際の統合(engine.start/stop)
+  const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(3D表示)
   const [exportFormat, setExportFormat] = useState(0); // 0:STLバイナリ 2:PLY(色付き)
   const [exportReq, setExportReq] = useState(0);
 
@@ -65,6 +66,7 @@ export default function ScanSessionScreen() {
     useCallback(() => {
       return () => {
         setIsScanning(false);
+        setInSession(false);
         setCenterDepth(0);
         setTriangles(0);
       };
@@ -128,7 +130,7 @@ export default function ScanSessionScreen() {
         displayMode={DepthDisplayMode.Filtered}
         scanMode={scanMode}
         meshView={view3D}
-        cameraFollow={view3D}
+        cameraFollow={false}
         worldTracking={false}
         globalOptimize={false}
         depthOdometry={true}
@@ -138,7 +140,7 @@ export default function ScanSessionScreen() {
       />
 
       {/* ─── 開始前: モード選択 ─────────────────────────── */}
-      {!isScanning && (
+      {!inSession && (
         <View style={styles.selectOverlay}>
           <Text style={styles.selectTitle}>3Dスキャン</Text>
           <Text style={styles.selectSubtitle}>対象のサイズを選んでください</Text>
@@ -168,49 +170,66 @@ export default function ScanSessionScreen() {
             })}
           </View>
 
+          {/* 画面を切り替えるだけ。スキャン(統合)はスキャン画面の開始ボタンで行う。 */}
           <TouchableOpacity
             style={styles.startButton}
             onPress={() => {
               setView3D(false);
-              setIsScanning(true);
+              setInSession(true);
             }}>
-            <Text style={styles.startButtonText}>スキャン開始</Text>
+            <Text style={styles.startButtonText}>スキャン画面へ</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* ─── スキャン中: 距離ガイド + 操作 ───────────────── */}
-      {isScanning && (
+      {/* ─── スキャン画面: 距離ガイド + 操作 ───────────────── */}
+      {inSession && (
         <>
-          {/* トラッキング警告（背面カメラが環境を捉えられていないとき） */}
-          {!trackingOk && (
+          {/* トラッキング警告（スキャン中のみ） */}
+          {isScanning && !trackingOk && (
             <View style={styles.trackWarn}>
               <Text style={styles.trackWarnText}>
-                トラッキング不安定（{tracking}）: 背面カメラに模様のある環境を向けてください
+                トラッキング不安定（{tracking}）: ゆっくり動かし、対象を画面内に保ってください
               </Text>
             </View>
           )}
 
-          {/* 中央の距離リング（色で適正距離を示す） */}
-          <View style={styles.ringWrap} pointerEvents="none">
-            <View style={[styles.ring, {borderColor: dist.color}]}>
-              <Text style={[styles.ringCm, {color: dist.color}]}>{cm}</Text>
-              <Text style={styles.ringUnit}>cm</Text>
+          {/* 中央の距離リング（スキャン中のみ・色で適正距離を示す） */}
+          {isScanning && (
+            <View style={styles.ringWrap} pointerEvents="none">
+              <View style={[styles.ring, {borderColor: dist.color}]}>
+                <Text style={[styles.ringCm, {color: dist.color}]}>{cm}</Text>
+                <Text style={styles.ringUnit}>cm</Text>
+              </View>
+              <View style={[styles.distBadge, {backgroundColor: dist.color}]}>
+                <Text style={styles.distBadgeText}>{dist.label}</Text>
+              </View>
+              <Text style={styles.rangeHint}>
+                適正 {Math.round(rangeMin * 100)}〜{Math.round(rangeMax * 100)}cm
+              </Text>
             </View>
-            <View style={[styles.distBadge, {backgroundColor: dist.color}]}>
-              <Text style={styles.distBadgeText}>{dist.label}</Text>
-            </View>
-            <Text style={styles.rangeHint}>
-              適正 {Math.round(rangeMin * 100)}〜{Math.round(rangeMax * 100)}cm
-            </Text>
-          </View>
+          )}
 
-          {/* 上部ステータス */}
+          {/* 上部: 戻る + ステータス */}
           <View style={styles.topBar}>
-            <View style={styles.recBadge}>
-              <View style={styles.recDot} />
-              <Text style={styles.recText}>スキャン中</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => {
+                setIsScanning(false);
+                setInSession(false);
+              }}>
+              <Text style={styles.backButtonText}>‹ 戻る</Text>
+            </TouchableOpacity>
+            {isScanning ? (
+              <View style={styles.recBadge}>
+                <View style={styles.recDot} />
+                <Text style={styles.recText}>スキャン中</Text>
+              </View>
+            ) : (
+              <View style={styles.recBadge}>
+                <Text style={styles.recText}>準備完了 — 開始を押す</Text>
+              </View>
+            )}
             <View style={styles.triBadge}>
               <Text style={styles.triText}>{triangles.toLocaleString()} 面</Text>
             </View>
@@ -221,14 +240,15 @@ export default function ScanSessionScreen() {
             <TouchableOpacity
               style={[styles.sideButton, view3D && styles.sideButtonActive]}
               onPress={() => setView3D(p => !p)}>
-              <Text style={styles.sideButtonText}>{view3D ? 'AR' : '深度'}</Text>
-              <Text style={styles.sideButtonSub}>{view3D ? '重ね' : '表示'}</Text>
+              <Text style={styles.sideButtonText}>{view3D ? 'メッシュ' : '深度'}</Text>
+              <Text style={styles.sideButtonSub}>表示</Text>
             </TouchableOpacity>
 
+            {/* 開始/停止トグル（Engineタブと同じ。画面は切り替えない） */}
             <TouchableOpacity
-              style={styles.stopButton}
-              onPress={() => setIsScanning(false)}>
-              <View style={styles.stopSquare} />
+              style={[styles.scanToggle, isScanning && styles.scanToggleStop]}
+              onPress={() => setIsScanning(p => !p)}>
+              <Text style={styles.scanToggleText}>{isScanning ? '停止' : '開始'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.saveButton} onPress={onSavePress}>
@@ -379,15 +399,23 @@ const styles = StyleSheet.create({
   sideButtonActive: {backgroundColor: '#5e5ce6'},
   sideButtonText: {color: '#fff', fontSize: 16, fontWeight: '800'},
   sideButtonSub: {color: '#ddd', fontSize: 10, fontWeight: '600'},
-  stopButton: {
+  scanToggle: {
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: '#ff3b30',
+    backgroundColor: '#0a84ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stopSquare: {width: 30, height: 30, borderRadius: 6, backgroundColor: '#fff'},
+  scanToggleStop: {backgroundColor: '#ff3b30'},
+  scanToggleText: {color: '#fff', fontSize: 18, fontWeight: '800'},
+  backButton: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  backButtonText: {color: '#fff', fontSize: 14, fontWeight: '700'},
   saveButton: {
     width: 66,
     height: 66,
