@@ -118,6 +118,32 @@ final class ICPRefiner {
             }
             var b = [Double](repeating: 0, count: 6)
             for j in 0..<6 { b[j] = acc[21 + j] }
+
+            // --- #1 ARKit 事前分布 + #2 劣決定ダンピング ---
+            // 滑らかな側面では point-to-plane が接線方向に拘束を持たず（劣決定）、ICP が滑って
+            // 観測がにじむ。現在姿勢 T から予測姿勢 vioPose(=ARKit予測) へ移す増分ツイスト
+            // ξ_prior = log(vioPose·T⁻¹) を求め、これへ引き戻す事前分布を法線方程式に加える。
+            // 重みは回転/並進ブロックごとに「測定情報の平均対角」でスケール（単位差を吸収）するため、
+            // 拘束の強い方向では相対的に無視でき、拘束の弱い方向では支配的になって ARKit へ収束する。
+            if config.icpPriorWeight > 0 {
+                let M = vioPose * T.inverse   // 予測へ移す残差変換（小角）
+                // delta(ω,t) 規約に整合する反対称成分から ω を、並進列から t を取り出す。
+                let prior: [Double] = [
+                    Double(0.5 * (M.columns.1.z - M.columns.2.y)),
+                    Double(0.5 * (M.columns.2.x - M.columns.0.z)),
+                    Double(0.5 * (M.columns.0.y - M.columns.1.x)),
+                    Double(M.columns.3.x), Double(M.columns.3.y), Double(M.columns.3.z)]
+                let rotScale = (A[0] + A[7] + A[14]) / 3.0
+                let transScale = (A[21] + A[28] + A[35]) / 3.0
+                let w = Double(config.icpPriorWeight)
+                let lambda = [w * rotScale, w * rotScale, w * rotScale,
+                              w * transScale, w * transScale, w * transScale]
+                for d in 0..<6 {
+                    A[d * 6 + d] += lambda[d]
+                    b[d] += lambda[d] * prior[d]
+                }
+            }
+
             // 正則化（数値安定）。
             for d in 0..<6 { A[d * 6 + d] += 1e-4 * A[d * 6 + d] + 1e-7 }
 

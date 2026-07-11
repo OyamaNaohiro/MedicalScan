@@ -54,6 +54,7 @@
   | icpIterations | 5 | 反復数。多いほど収束/重い |
   | icpStride | 6 | 深度間引き。小さいほど密/重い |
   | icpMinWeight | 2 | モデルとして信頼する最小重み |
+  | **icpPriorWeight** | **0.15** | ARKit予測への事前分布の相対重み。**劣決定（滑らかな側面で接線に滑る）方向をARKitで安定化**。0=無効 |
   | minCorrespondences | 200（ICPRefiner） | これ未満で中断 |
   | maxRotation / maxTranslation | 0.15rad / 0.05m per iter（ICPRefiner） | 発散検出 |
   | .ok/.poor閾値 | rms ≤ truncation（ICPRefiner） | ICP対応バンド＝truncation |

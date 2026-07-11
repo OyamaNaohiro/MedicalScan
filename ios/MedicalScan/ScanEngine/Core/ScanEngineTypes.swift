@@ -199,6 +199,10 @@ struct ScanConfig {
     var icpIterations: Int = 5
     var icpStride: Int = 6                // 深度の間引き（点数削減）
     var icpMinWeight: Float = 2           // モデル(TSDF)として信頼する最小重み
+    /// ARKit 予測運動への事前分布の相対重み。測定情報の平均対角でスケールするため、
+    /// 拘束の強い方向では無視でき、拘束の弱い（滑らかな側面で接線に滑る）方向では支配的になり、
+    /// ICP の劣決定を ARKit 予測で安定化する（0=無効）。
+    var icpPriorWeight: Float = 0.15
 
     // 整合ゲート（姿勢は動かさず、既存メッシュと一致するフレームだけ統合）
     var gateMinOverlap: Int = 250         // これ未満＝重なりほぼ無し（新領域）のときは無条件統合。
