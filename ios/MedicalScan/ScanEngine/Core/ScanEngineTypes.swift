@@ -50,7 +50,8 @@ enum ScanMode: Int {
             c.sdfHoleFillMinNeighbors = 22
             // 1.5mm はノイズが目立ちやすい。残像の出ないボリューム空間の平均化で表面を滑らかにする。
             c.maxWeight = 128        // ボリューム空間での観測平均を増やす（64→128）
-            // meshMinWeight/grazingCosMin は既定のまま（下げるとノイズ拾いでぼこぼこになるため）。
+            // 指の側面・縁など斜め視点の観測を拾い、周回中の細部を繋げる（meshMinWeight は既定のまま）。
+            c.grazingCosMin = 0.05   // 0.1→0.05
         case .foot:
             c.voxelSize = 0.002                  // 2.0mm
             c.volumeExtent = [0.5, 0.5, 0.5]     // 250^3 ≈ 1560万ボクセル
