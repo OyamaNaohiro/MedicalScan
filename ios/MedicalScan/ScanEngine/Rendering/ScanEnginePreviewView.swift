@@ -212,13 +212,13 @@ final class ScanEnginePreviewView: MTKView {
         let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
                                     near: 0.02, far: meshRadius * 12 + 1)
         if followCamera, let c = cameraToWorld {
-            // 「今カメラが見ている方向」だけを使い、距離は一定にしてメッシュ中心を見る。
-            // 実距離を使う完全追従(AR)と違い、常に中心・一定サイズで映るので画面外に消えない。
-            // ＝センサーが今観測している面が正面を向く、直感的な見え方になる。
-            let camPos = SIMD3<Float>(c.columns.3.x, c.columns.3.y, c.columns.3.z)
-            let toCam = camPos - meshCenter
-            let len = simd_length(toCam)
-            let unit = len > 1e-4 ? toCam / len : SIMD3<Float>(0, 0, 1)
+            // 実カメラの「向き(回転)」だけを使い、距離は一定にしてメッシュ中心を見る。
+            // 位置(columns.3)は World OFF では並進追従が弱くほぼ動かないため使わない。
+            // カメラ+Z軸(columns.2)＝中心からカメラ側への方向。これを視点方向にすると
+            // 今センサーが観測している面が正面を向く。常に中心・一定サイズなので消えない。
+            let camZ = SIMD3<Float>(c.columns.2.x, c.columns.2.y, c.columns.2.z)
+            let len = simd_length(camZ)
+            let unit = len > 1e-4 ? camZ / len : SIMD3<Float>(0, 0, 1)
             // 方向を平滑化して実カメラの向きに滑らかに追従（ジッタ抑制）。線形補間→正規化。
             smoothedDir = simd_length(smoothedDir) < 1e-4
                 ? unit : simd_normalize(smoothedDir + (unit - smoothedDir) * Float(0.12))
