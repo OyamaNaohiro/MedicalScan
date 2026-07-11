@@ -50,6 +50,7 @@ export default function ScanSessionScreen() {
   const [scanMode, setScanMode] = useState<ScanMode>(ScanMode.Hand);
   const [isScanning, setIsScanning] = useState(false);
   const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(カメラ視点)
+  const [exportFormat, setExportFormat] = useState(0); // 0:STLバイナリ 2:PLY(色付き)
   const [exportReq, setExportReq] = useState(0);
 
   // 距離ガイド・進捗の計測値。
@@ -98,9 +99,29 @@ export default function ScanSessionScreen() {
   const cm = centerDepth > 0 ? `${Math.round(centerDepth * 100)}` : '--';
   const trackingOk = tracking === 'normal' || tracking === '-';
 
+  // 保存要求。フォーマット prop を先に反映させてから次tickで要求を出す
+  // （ネイティブが正しい形式で読むよう順序を保証する）。
+  const requestExport = useCallback((format: number) => {
+    setExportFormat(format);
+    setTimeout(() => setExportReq(Date.now()), 0);
+  }, []);
+
+  const onSavePress = useCallback(() => {
+    if (triangles <= 0) {
+      Alert.alert('まだ保存できません', 'メッシュが生成されていません。対象を数秒スキャンしてください。');
+      return;
+    }
+    Alert.alert('保存形式を選択', 'エクスポートする形式を選んでください。', [
+      {text: 'STL（形状のみ）', onPress: () => requestExport(0)},
+      {text: 'PLY（色付き）', onPress: () => requestExport(2)},
+      {text: 'キャンセル', style: 'cancel'},
+    ]);
+  }, [triangles, requestExport]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* 常時マウント（エンジン・ボリュームを安定させる）。開始前は上に選択UIを重ねる。 */}
+      {/* 推奨設定を固定適用: World OFF / GlobalOpt OFF / DepthOdom ON / Color ON。 */}
       <ScanEnginePreview
         style={styles.preview}
         isScanning={isScanning}
@@ -108,6 +129,12 @@ export default function ScanSessionScreen() {
         scanMode={scanMode}
         meshView={view3D}
         cameraFollow={view3D}
+        worldTracking={false}
+        globalOptimize={false}
+        depthOdometry={true}
+        colorBaking={true}
+        exportFormat={exportFormat}
+        exportRequest={exportReq}
       />
 
       {/* ─── 開始前: モード選択 ─────────────────────────── */}
@@ -204,11 +231,9 @@ export default function ScanSessionScreen() {
               <View style={styles.stopSquare} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={() => setExportReq(Date.now())}>
-              <Text style={styles.saveButtonText}>STL</Text>
-              <Text style={styles.sideButtonSub}>保存</Text>
+            <TouchableOpacity style={styles.saveButton} onPress={onSavePress}>
+              <Text style={styles.saveButtonText}>保存</Text>
+              <Text style={styles.sideButtonSub}>STL/PLY</Text>
             </TouchableOpacity>
           </View>
         </>
