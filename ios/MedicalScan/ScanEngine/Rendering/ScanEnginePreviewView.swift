@@ -63,7 +63,9 @@ final class ScanEnginePreviewView: MTKView {
     private var meshRadius: Float = 0.5
     /// 撮影中カメラの最新姿勢（ワールド）。カメラ位置リンク表示に使う。
     private var cameraToWorld: simd_float4x4?
-    /// true でメッシュを「撮影中カメラの視点」から描画（自動回転→カメラ位置リンク）。
+    /// 方向追従の平滑化済み視線方向（メッシュ中心→視点）。ジッタ抑制用に保持。
+    private var smoothedDir = SIMD3<Float>(0, 0, 1)
+    /// true でメッシュを「撮影中カメラの向き」に方向追従して描画（中心固定・一定距離）。
     var followCamera = false
 
     // AR オーバーレイ（カメラ映像へメッシュを重ねるライブ表示）。
@@ -204,20 +206,27 @@ final class ScanEnginePreviewView: MTKView {
     }
 
     /// メッシュ描画の MVP を作る。
-    /// followCamera かつ姿勢があれば「撮影中カメラの視点」から見る（＝カメラ位置にリンク）。
+    /// followCamera かつ姿勢があれば「撮影中カメラの向き」に方向追従（中心固定・一定距離）。
     /// それ以外は時間で回る軌道カメラ（自動回転）。
     fileprivate func meshMVP(aspect: Float) -> simd_float4x4 {
         let proj = Self.perspective(fovY: 60 * .pi / 180, aspect: aspect,
                                     near: 0.02, far: meshRadius * 12 + 1)
         if followCamera, let c = cameraToWorld {
-            // カメラのワールド位置からメッシュ中心を見る。近すぎて内部に入らないよう最小距離を確保。
+            // 「今カメラが見ている方向」だけを使い、距離は一定にしてメッシュ中心を見る。
+            // 実距離を使う完全追従(AR)と違い、常に中心・一定サイズで映るので画面外に消えない。
+            // ＝センサーが今観測している面が正面を向く、直感的な見え方になる。
             let camPos = SIMD3<Float>(c.columns.3.x, c.columns.3.y, c.columns.3.z)
-            var eye = camPos
-            let toCenter = meshCenter - eye
-            let d = simd_length(toCenter)
-            let minD = meshRadius * 1.2
-            if d > 1e-4, d < minD { eye = meshCenter - (toCenter / d) * minD }
-            let view = Self.lookAt(eye: eye, center: meshCenter, up: SIMD3<Float>(0, 1, 0))
+            let toCam = camPos - meshCenter
+            let len = simd_length(toCam)
+            let unit = len > 1e-4 ? toCam / len : SIMD3<Float>(0, 0, 1)
+            // 方向を平滑化して実カメラの向きに滑らかに追従（ジッタ抑制）。線形補間→正規化。
+            smoothedDir = simd_length(smoothedDir) < 1e-4
+                ? unit : simd_normalize(smoothedDir + (unit - smoothedDir) * Float(0.12))
+            let dist = meshRadius * 2.2
+            let eye = meshCenter + smoothedDir * dist
+            // 真上/真下付近では up=(0,1,0) が退化するので水平軸に切り替える。
+            let up = abs(smoothedDir.y) > 0.99 ? SIMD3<Float>(0, 0, 1) : SIMD3<Float>(0, 1, 0)
+            let view = Self.lookAt(eye: eye, center: meshCenter, up: up)
             return proj * view
         }
         let t = Float(CACurrentMediaTime())

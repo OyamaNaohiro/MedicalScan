@@ -130,7 +130,7 @@ export default function ScanSessionScreen() {
         displayMode={DepthDisplayMode.Filtered}
         scanMode={scanMode}
         meshView={view3D}
-        cameraFollow={false}
+        cameraFollow={view3D}
         worldTracking={false}
         globalOptimize={false}
         depthOdometry={true}

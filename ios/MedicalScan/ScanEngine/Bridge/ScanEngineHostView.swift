@@ -76,12 +76,13 @@ final class ScanEngineHostView: UIView {
         didSet { preview?.meshEnabled = meshView }
     }
 
-    /// メッシュを撮影中カメラの視点から見る（カメラ位置リンク）。UX 画面で ON。
-    /// ON のときはカメラ映像を背景に重ねる AR オーバーレイ＋高頻度メッシュも有効化する。
+    /// メッシュを「撮影中カメラの向き」に方向追従して見る（中心固定・一定距離）。UX 画面で ON。
+    /// 実カメラへの完全追従(AR オーバーレイ)は画面外に消えるため使わず、向きだけ追従する。
+    /// ON のときは高頻度メッシュ更新(liveMode)も有効化して見え方を滑らかにする。
     @objc var cameraFollow: Bool = false {
         didSet {
             preview?.followCamera = cameraFollow
-            preview?.arOverlay = cameraFollow
+            preview?.arOverlay = false        // AR オーバーレイは無効（方向追従に置換）
             engine?.liveMode = cameraFollow
         }
     }
