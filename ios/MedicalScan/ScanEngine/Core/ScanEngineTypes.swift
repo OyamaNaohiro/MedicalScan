@@ -222,7 +222,8 @@ struct ScanConfig {
         // 融合帯(truncation)を厚くし、ドリフト＋ノイズでズレた観測を1枚の面に融合する（二重壁対策の主レバー）。
         truncationScale = max(truncationScale, 6)
         // LiDAR は近距離が粗く 256x192 補間。細かすぎる voxel は補間ノイズを拾うだけなので下限を上げる。
-        voxelSize = max(voxelSize, 0.004)
+        // 5mm（truncation=×6→30mm）。二重壁が残るため 4→5mm に上げて融合帯を厚くする。
+        voxelSize = max(voxelSize, 0.005)
         // ※ depthMax は変えない（ボリューム配置距離 (depthMin+depthMax)/2 に影響し、現状の撮影距離が
         //   ズレてしまうため）。撮影距離を延ばしたくなったら別途 LiDAR 用モードを追加する。
     }
