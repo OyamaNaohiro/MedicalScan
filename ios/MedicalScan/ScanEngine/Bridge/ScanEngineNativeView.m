@@ -42,6 +42,11 @@
   [_impl setValue:@(scanMode) forKey:@"scanMode"];
 }
 
+- (void)setSensor:(NSInteger)sensor {
+  _sensor = sensor;
+  [_impl setValue:@(sensor) forKey:@"sensor"];
+}
+
 - (void)setConfidenceEnabled:(BOOL)confidenceEnabled {
   _confidenceEnabled = confidenceEnabled;
   [_impl setValue:@(confidenceEnabled) forKey:@"confidenceEnabled"];

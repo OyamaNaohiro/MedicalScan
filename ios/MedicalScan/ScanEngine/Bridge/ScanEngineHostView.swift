@@ -20,6 +20,7 @@ final class ScanEngineHostView: UIView {
 
     private var engine: ScanEngine?
     private var preview: ScanEnginePreviewView?
+    private var currentSensor: ScanSensor = .trueDepth
 
     // MARK: - メトリクス集約
 
@@ -61,6 +62,16 @@ final class ScanEngineHostView: UIView {
         didSet {
             let mode = ScanMode(rawValue: scanMode) ?? .upperBody
             engine?.applyMode(mode)
+        }
+    }
+
+    /// 深度センサー。0:TrueDepth(前面) 1:LiDAR(背面 sceneDepth)。
+    /// 変更でエンジンを再構築する（AR セッションは前面/背面で相互排他のため差し替え不可）。
+    @objc var sensor: Int = 0 {
+        didSet {
+            let s: ScanSensor = (sensor == 1) ? .lidar : .trueDepth
+            guard s != currentSensor else { return }
+            rebuild(sensor: s)
         }
     }
 
@@ -191,8 +202,12 @@ final class ScanEngineHostView: UIView {
 
     private func setup() {
         backgroundColor = .black
+        buildEngine(sensor: currentSensor)
+    }
 
-        guard let engine = ScanEngine.makeDefault() else {
+    /// 指定センサーでエンジン＋プレビューを構築・配線し、現在のプロパティ値を反映する。
+    private func buildEngine(sensor: ScanSensor) {
+        guard let engine = ScanEngine.makeDefault(sensor: sensor) else {
             ScanEventEmitter.emitEvent(["type": "engineError",
                                         "message": "Metal を初期化できませんでした。"])
             return
@@ -213,9 +228,47 @@ final class ScanEngineHostView: UIView {
             preview.topAnchor.constraint(equalTo: topAnchor),
             preview.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        preview.displayMode = DepthDisplayMode(rawValue: displayMode) ?? .filtered
+        // 背面 LiDAR はミラーしない（前面 TrueDepth はミラー表示）。
+        preview.mirror = (sensor != .lidar)
 
         wireCallbacks(engine: engine, preview: preview)
+        if bounds.width > 1, bounds.height > 1 { engine.previewViewport = bounds.size }
+        applyCurrentProps()
+    }
+
+    /// センサー切替。AR セッションは前面/背面で相互排他のため、エンジンごと作り直す。
+    private func rebuild(sensor: ScanSensor) {
+        engine?.stop()
+        preview?.removeFromSuperview()
+        engine = nil
+        preview = nil
+        currentSensor = sensor
+        buildEngine(sensor: sensor)
+    }
+
+    /// 現在の React プロパティ値をすべて新しいエンジン/プレビューへ反映する。
+    /// 再構築時、didSet 経由で設定済みだった値が失われないよう明示的に押し込む。
+    private func applyCurrentProps() {
+        let dm = DepthDisplayMode(rawValue: displayMode) ?? .filtered
+        preview?.displayMode = dm
+        metrics.displayMode = dm
+        engine?.filterChain.setEnabled(confidenceEnabled, for: "Confidence")
+        engine?.filterChain.setEnabled(bilateralEnabled, for: "Bilateral")
+        engine?.filterChain.setEnabled(temporalEnabled, for: "Temporal")
+        engine?.applyMode(ScanMode(rawValue: scanMode) ?? .upperBody)
+        preview?.meshEnabled = meshView
+        preview?.followCamera = cameraFollow
+        preview?.arOverlay = false
+        engine?.liveMode = cameraFollow
+        engine?.sdfSmoothEnabled = sdfSmooth
+        engine?.icpEnabled = icpEnabled
+        engine?.connectGate = connectGate
+        engine?.sparseEnabled = sparseEnabled
+        engine?.globalOptimizationEnabled = globalOptimize
+        engine?.worldTrackingEnabled = worldTracking
+        engine?.depthOdometryEnabled = depthOdometry
+        engine?.colorBakingEnabled = colorBaking
+        engine?.exportDecimateRatio = Float(decimateRatio)
     }
 
     // MARK: - 配線

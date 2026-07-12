@@ -7,6 +7,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import ScanScreen from './src/screens/ScanScreen';
 import ScanSessionScreen from './src/screens/ScanSessionScreen';
 import ScanEngineScreen from './src/screens/ScanEngineScreen';
+import {Sensor} from './src/native/ScanEnginePreview';
 import FilesScreen from './src/screens/FilesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
@@ -60,6 +61,15 @@ function App() {
               tabBarLabel: 'Engine',
             }}
           />
+          <Tab.Screen
+            name="EngineLiDAR"
+            options={{
+              title: 'LiDAR',
+              headerShown: false,
+              tabBarLabel: 'LiDAR',
+            }}>
+            {() => <ScanEngineScreen sensor={Sensor.LiDAR} />}
+          </Tab.Screen>
           <Tab.Screen
             name="Files"
             component={FilesScreen}

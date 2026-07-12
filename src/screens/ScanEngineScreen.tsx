@@ -2,7 +2,12 @@ import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
-import {ScanEnginePreview, DepthDisplayMode, ScanMode} from '../native/ScanEnginePreview';
+import {
+  ScanEnginePreview,
+  DepthDisplayMode,
+  ScanMode,
+  Sensor,
+} from '../native/ScanEnginePreview';
 import {addScanEventListener} from '../native/ScanEventEmitter';
 
 interface Metrics {
@@ -59,7 +64,12 @@ const SCAN_MODES: {label: string; sub: string; value: ScanMode}[] = [
   {label: '上半身', sub: '1m / 3.0mm', value: ScanMode.UpperBody},
 ];
 
-export default function ScanEngineScreen() {
+export default function ScanEngineScreen({
+  sensor = Sensor.TrueDepth,
+}: {
+  sensor?: Sensor;
+}) {
+  const isLiDAR = sensor === Sensor.LiDAR;
   const [isScanning, setIsScanning] = useState(false);
   const [mode, setMode] = useState<DepthDisplayMode>(DepthDisplayMode.Filtered);
   const [scanMode, setScanMode] = useState<ScanMode>(ScanMode.UpperBody);
@@ -135,6 +145,7 @@ export default function ScanEngineScreen() {
         isScanning={isScanning}
         displayMode={mode}
         scanMode={scanMode}
+        sensor={sensor}
         confidenceEnabled={confidenceOn}
         bilateralEnabled={bilateralOn}
         temporalEnabled={temporalOn}
@@ -157,7 +168,9 @@ export default function ScanEngineScreen() {
 
       {/* デバッグ HUD */}
       <View style={styles.hud} pointerEvents="none">
-        <Text style={styles.hudTitle}>ScanEngine (Phase 3a)</Text>
+        <Text style={styles.hudTitle}>
+          ScanEngine ({isLiDAR ? 'LiDAR 背面' : 'TrueDepth 前面'})
+        </Text>
         <HudRow label="Render FPS" value={metrics.renderFPS.toFixed(1)} />
         <HudRow label="Depth FPS" value={metrics.depthFPS.toFixed(1)} />
         <HudRow label="GPU" value={`${metrics.gpuMs.toFixed(2)} ms`} />

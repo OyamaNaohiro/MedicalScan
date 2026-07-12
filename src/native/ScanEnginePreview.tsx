@@ -16,11 +16,18 @@ export enum ScanMode {
   UpperBody = 2, // 上半身 ~1m / voxel 3.0mm
 }
 
+// 深度センサー（ネイティブ ScanSensor と一致）。
+export enum Sensor {
+  TrueDepth = 0, // 前面 TrueDepth（近距離・高解像）
+  LiDAR = 1, // 背面 LiDAR sceneDepth（中距離・6DOF追従）
+}
+
 interface ScanEnginePreviewProps {
   style?: ViewStyle;
   isScanning?: boolean;
   displayMode?: DepthDisplayMode;
   scanMode?: ScanMode; // 対象サイズ別プリセット（開始前に設定）
+  sensor?: Sensor; // 深度センサー 0:TrueDepth 1:LiDAR（変更でエンジン再構築）
   confidenceEnabled?: boolean;
   bilateralEnabled?: boolean;
   temporalEnabled?: boolean;
@@ -56,6 +63,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   isScanning = false,
   displayMode = DepthDisplayMode.Filtered,
   scanMode = ScanMode.UpperBody,
+  sensor = Sensor.TrueDepth,
   confidenceEnabled = true,
   bilateralEnabled = true,
   temporalEnabled = true,
@@ -85,6 +93,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       isScanning={isScanning}
       displayMode={displayMode}
       scanMode={scanMode}
+      sensor={sensor}
       confidenceEnabled={confidenceEnabled}
       bilateralEnabled={bilateralEnabled}
       temporalEnabled={temporalEnabled}

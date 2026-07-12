@@ -27,6 +27,7 @@
 		AB000005B368108700A75B9A /* ScanEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000006B368108700A75B9A /* ScanEngine.swift */; };
 		AB000007B368108700A75B9A /* DepthFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000008B368108700A75B9A /* DepthFrameSource.swift */; };
 		AB000009B368108700A75B9A /* TrueDepthSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000AB368108700A75B9A /* TrueDepthSource.swift */; };
+		AB0000F0B368108700A75B9A /* LiDARSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000F1B368108700A75B9A /* LiDARSource.swift */; };
 		AB00000BB368108700A75B9A /* DepthFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000CB368108700A75B9A /* DepthFilter.swift */; };
 		AB00000DB368108700A75B9A /* ScanMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000EB368108700A75B9A /* ScanMetrics.swift */; };
 		AB00000FB368108700A75B9A /* ScanEnginePreview.metal in Sources */ = {isa = PBXBuildFile; fileRef = AB000010B368108700A75B9A /* ScanEnginePreview.metal */; };
@@ -93,6 +94,7 @@
 		AB000006B368108700A75B9A /* ScanEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScanEngine.swift; path = MedicalScan/ScanEngine/Core/ScanEngine.swift; sourceTree = "<group>"; };
 		AB000008B368108700A75B9A /* DepthFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DepthFrameSource.swift; path = MedicalScan/ScanEngine/Capture/DepthFrameSource.swift; sourceTree = "<group>"; };
 		AB00000AB368108700A75B9A /* TrueDepthSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TrueDepthSource.swift; path = MedicalScan/ScanEngine/Capture/TrueDepthSource.swift; sourceTree = "<group>"; };
+		AB0000F1B368108700A75B9A /* LiDARSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiDARSource.swift; path = MedicalScan/ScanEngine/Capture/LiDARSource.swift; sourceTree = "<group>"; };
 		AB00000CB368108700A75B9A /* DepthFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DepthFilter.swift; path = MedicalScan/ScanEngine/Filtering/DepthFilter.swift; sourceTree = "<group>"; };
 		AB00000EB368108700A75B9A /* ScanMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScanMetrics.swift; path = MedicalScan/ScanEngine/Core/ScanMetrics.swift; sourceTree = "<group>"; };
 		AB000010B368108700A75B9A /* ScanEnginePreview.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = ScanEnginePreview.metal; path = MedicalScan/ScanEngine/Rendering/ScanEnginePreview.metal; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 				AB000006B368108700A75B9A /* ScanEngine.swift */,
 				AB000008B368108700A75B9A /* DepthFrameSource.swift */,
 				AB00000AB368108700A75B9A /* TrueDepthSource.swift */,
+				AB0000F1B368108700A75B9A /* LiDARSource.swift */,
 				AB00000CB368108700A75B9A /* DepthFilter.swift */,
 				AB00000EB368108700A75B9A /* ScanMetrics.swift */,
 				AB000010B368108700A75B9A /* ScanEnginePreview.metal */,
@@ -417,6 +420,7 @@
 				AB000005B368108700A75B9A /* ScanEngine.swift in Sources */,
 				AB000007B368108700A75B9A /* DepthFrameSource.swift in Sources */,
 				AB000009B368108700A75B9A /* TrueDepthSource.swift in Sources */,
+				AB0000F0B368108700A75B9A /* LiDARSource.swift in Sources */,
 				AB00000BB368108700A75B9A /* DepthFilter.swift in Sources */,
 				AB00000DB368108700A75B9A /* ScanMetrics.swift in Sources */,
 				AB00000FB368108700A75B9A /* ScanEnginePreview.metal in Sources */,
@@ -461,7 +465,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 111;
+				CURRENT_PROJECT_VERSION = 112;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -492,7 +496,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 111;
+				CURRENT_PROJECT_VERSION = 112;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -198,10 +198,14 @@ final class ScanEngine: DepthFrameSourceDelegate {
         onEvent?("thermal", "発熱警告: \(label)")
     }
 
-    /// TrueDepth を既定ソースとし、標準フィルタ（Confidence）を組み込んで構築する。
-    static func makeDefault(config: ScanConfig = ScanConfig()) -> ScanEngine? {
+    /// 指定センサーをソースとし、標準フィルタ（Confidence）を組み込んで構築する。
+    /// - Parameter sensor: .trueDepth（前面・既定）/ .lidar（背面 sceneDepth）。
+    static func makeDefault(sensor: ScanSensor = .trueDepth,
+                            config: ScanConfig = ScanConfig()) -> ScanEngine? {
         guard let context = MetalContext() else { return nil }
-        let source = TrueDepthSource(context: context)
+        let source: DepthFrameSource = (sensor == .lidar)
+            ? LiDARSource(context: context)
+            : TrueDepthSource(context: context)
         let engine = ScanEngine(context: context, source: source, config: config)
         engine.filterChain.append(ConfidenceFilter(config: config))  // priority 10
         engine.filterChain.append(BilateralFilter(config: config))   // priority 20
