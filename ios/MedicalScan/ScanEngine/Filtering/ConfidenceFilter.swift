@@ -20,11 +20,12 @@ final class ConfidenceFilter: DepthFilter {
     /// しきい値類（ScanEngine と共有）。
     var config: ScanConfig
 
-    // metal の ConfidenceUniforms とレイアウト一致（9 x Float）。
+    // metal の ConfidenceUniforms とレイアウト一致。
     private struct Uniforms {
         var fx: Float; var fy: Float; var cx: Float; var cy: Float
         var depthMin: Float; var depthMax: Float
         var qualityMin: Float; var frameQuality: Float; var grazingCosMin: Float
+        var confidenceMin: Float; var hasConfidence: UInt32
     }
 
     // 使い回す出力テクスチャ（解像度変化時のみ再確保）。
@@ -52,12 +53,15 @@ final class ConfidenceFilter: DepthFilter {
                          cx: frame.intrinsics.cx, cy: frame.intrinsics.cy,
                          depthMin: config.depthMin, depthMax: config.depthMax,
                          qualityMin: config.qualityMin, frameQuality: frame.quality,
-                         grazingCosMin: config.grazingCosMin)
+                         grazingCosMin: config.grazingCosMin,
+                         confidenceMin: config.confidenceMin,
+                         hasConfidence: frame.confidence != nil ? 1 : 0)
 
         encoder.setComputePipelineState(pso)
         encoder.setTexture(frame.depth, index: 0)
         encoder.setTexture(outDepth, index: 1)
         encoder.setTexture(outMask, index: 2)
+        encoder.setTexture(frame.confidence ?? frame.depth, index: 3)  // 無い時はダミー(hasConfidence=0で無視)
         encoder.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
         let (groups, tpg) = context.threadgroup2D(for: pso, width: frame.width, height: frame.height)
         encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: tpg)

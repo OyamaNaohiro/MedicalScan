@@ -20,6 +20,8 @@ struct ConfidenceUniforms {
     float qualityMin;                          // フレーム品質の足切り
     float frameQuality;                        // このフレームの品質 0..1
     float grazingCosMin;                       // |法線・視線| の下限（斜め縁を除外）
+    float confidenceMin;                       // 最小信頼度(正規化 0..1)。これ未満は無効（LiDAR）
+    uint  hasConfidence;                       // 1=信頼度テクスチャあり(LiDAR) 0=なし(TrueDepth)
 };
 
 // 深度画素 (x,y,d) をカメラ座標へ逆投影する。
@@ -36,6 +38,7 @@ kernel void confidenceFilterKernel(
         texture2d<float, access::read>  inDepth  [[texture(0)]],
         texture2d<float, access::write> outDepth [[texture(1)]],
         texture2d<float, access::write> outMask  [[texture(2)]],
+        texture2d<float, access::read>  inConf   [[texture(3)]],
         constant ConfidenceUniforms&    u        [[buffer(0)]],
         uint2 gid [[thread_position_in_grid]]) {
 
@@ -46,6 +49,11 @@ kernel void confidenceFilterKernel(
     float d = inDepth.read(gid).r;
     bool valid = isfinite(d) && d >= u.depthMin && d <= u.depthMax
                  && u.frameQuality >= u.qualityMin;
+
+    // per-pixel 信頼度による除外（LiDAR のみ。低信頼の縁・遠方ノイズを落とす）。
+    if (valid && u.hasConfidence != 0) {
+        if (inConf.read(gid).r < u.confidenceMin) valid = false;
+    }
 
     // grazing angle: 隣接画素から法線を推定し、視線とのなす角が浅い縁を除外。
     if (valid && gid.x + 1 < w && gid.y + 1 < h) {

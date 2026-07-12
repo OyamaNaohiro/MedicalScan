@@ -178,6 +178,9 @@ struct ScanConfig {
     var depthMax: Float = 0.90      // m
     var qualityMin: Float = 0.5     // フレーム品質の足切り
     var grazingCosMin: Float = 0.1  // |視線・法線| の下限。低いほど斜め縁も採用→周回時に側面がつながりやすい
+    /// per-pixel 信頼度(正規化 0=低 0.5=中 1.0=高)の採用下限。LiDAR のみ適用（TrueDepth は信頼度なし）。
+    /// 0.4=低のみ除外（中・高を採用）、0.75=高のみ採用（より強力なノイズ除去）。
+    var confidenceMin: Float = 0.4
 
     // フィルタ
     var bilateralSigmaSpace: Float = 3
