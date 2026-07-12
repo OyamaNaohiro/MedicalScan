@@ -259,7 +259,8 @@ final class ScanEngine: DepthFrameSourceDelegate {
         guard mode != scanMode || tsdf == nil else { return }
 
         scanMode = mode
-        let newConfig = mode.makeConfig()
+        var newConfig = mode.makeConfig()
+        if source.sensor == .lidar { newConfig.applyLiDARProfile() }   // LiDAR はノイズ・ドリフト大 → 厚い融合帯
         config = newConfig
         // 深度レンジ変更を ConfidenceFilter（有効マスク生成）へ反映。
         filterChain.updateConfig(newConfig)

@@ -215,6 +215,17 @@ struct ScanConfig {
                                           // 250 に戻し、ゲートを緩めてメッシュが育ちやすい 71 系の見え方に近づける
                                           // （厳格化=60 は二重壁を抑える代わりに面が欠けやすかったため元に戻した）
     var gateAgreeRatio: Float = 0.7       // 重なり点のうち表面に一致する最低割合（厳しめ）
+
+    /// LiDAR 向けにパラメータを補正する（TrueDepth 用プリセットからの上書き）。
+    /// LiDAR は ToF が疎で RGB 補間のため深度ノイズが大きく、周回で「二重壁」が出やすい。
+    mutating func applyLiDARProfile() {
+        // 融合帯(truncation)を厚くし、ドリフト＋ノイズでズレた観測を1枚の面に融合する（二重壁対策の主レバー）。
+        truncationScale = max(truncationScale, 6)
+        // LiDAR は近距離が粗く 256x192 補間。細かすぎる voxel は補間ノイズを拾うだけなので下限を上げる。
+        voxelSize = max(voxelSize, 0.004)
+        // ※ depthMax は変えない（ボリューム配置距離 (depthMin+depthMax)/2 に影響し、現状の撮影距離が
+        //   ズレてしまうため）。撮影距離を延ばしたくなったら別途 LiDAR 用モードを追加する。
+    }
 }
 
 // MARK: - エンジン状態（MVVM の Model が公開する状態）
