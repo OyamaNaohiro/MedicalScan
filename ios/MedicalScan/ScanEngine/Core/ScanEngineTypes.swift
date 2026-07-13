@@ -205,6 +205,10 @@ struct ScanConfig {
     var icpIterations: Int = 5
     var icpStride: Int = 6                // 深度の間引き（点数削減）
     var icpMinWeight: Float = 2           // モデル(TSDF)として信頼する最小重み
+    /// 統合を採用する ICP 残差 RMS の絶対上限[m]（ドリフトゲート）。実効しきい値は
+    /// min(truncation, icpOkMaxRms)。truncation を厚くしても、これを超えてズレたフレームは
+    /// 統合せずスキップしてモデルを守る（二重壁抑制）。既定は事実上無効化した大きな値。
+    var icpOkMaxRms: Float = 1.0
     /// ARKit 予測運動への事前分布の相対重み。劣決定方向の安定化を狙ったが、引き戻し先の ARKit
     /// 自体がドリフトするため、深度オドメトリに ARKit ドリフトを再注入してしまい全モードで劣化した
     /// （ビルド105→107で撤回）。0=無効。将来は引き戻し先を定速度モデル(深度オドメトリ自身)にすべき。
@@ -224,6 +228,9 @@ struct ScanConfig {
         // LiDAR は近距離が粗く 256x192 補間。細かすぎる voxel は補間ノイズを拾うだけなので下限を上げる。
         // 5mm（truncation=×6→30mm）。二重壁が残るため 4→5mm に上げて融合帯を厚くする。
         voxelSize = max(voxelSize, 0.005)
+        // ドリフトゲート: ICPで既存モデルに 12mm 以内で合ったフレームだけ統合し、
+        // それより大きくズレたフレームはスキップ（二重壁を作らせない）。truncation とは独立。
+        icpOkMaxRms = 0.012
         // ※ depthMax は変えない（ボリューム配置距離 (depthMin+depthMax)/2 に影響し、現状の撮影距離が
         //   ズレてしまうため）。撮影距離を延ばしたくなったら別途 LiDAR 用モードを追加する。
     }

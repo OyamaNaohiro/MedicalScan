@@ -163,10 +163,13 @@ final class ICPRefiner {
         return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
     }
 
-    /// 残差 RMS が truncation 以下なら .ok（pose で統合）、超なら .poor（統合スキップ）。
+    /// 残差 RMS が採用しきい値以下なら .ok（pose で統合）、超なら .poor（統合スキップ）。
+    /// しきい値は min(truncation, icpOkMaxRms)。truncation を厚くしても、ドリフトゲート
+    /// (icpOkMaxRms) を超えてズレたフレームは統合しない（二重壁抑制）。
     private func makeResult(_ pose: simd_float4x4, _ rms: Float, _ corr: Int,
                             _ config: ScanConfig) -> ICPResult {
-        let status: ICPResult.Status = rms <= config.truncation ? .ok : .poor
+        let okThresh = min(config.truncation, config.icpOkMaxRms)
+        let status: ICPResult.Status = rms <= okThresh ? .ok : .poor
         return ICPResult(pose: pose, rms: rms, correspondences: corr, status: status)
     }
 
