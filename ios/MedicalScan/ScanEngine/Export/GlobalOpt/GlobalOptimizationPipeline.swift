@@ -180,6 +180,13 @@ final class GlobalOptimizationPipeline {
             edges.append(PoseGraphEdge(from: i - 1, to: i, relativePose: rel,
                                        weight: 1, kind: .odometry))
         }
+        // ループ拘束の幾何推定を frame-to-frame ICP で注入する（現状 detector が既定実装のとき）。
+        // VIO 相対との食い違いが PGO により分配され、周回の継ぎ目が閉じる。
+        if let d = detector as? DefaultLoopClosureDetector {
+            let solver = LoopClosureICP(context: context, config: config)
+            d.featureMatch = { solver.solve($0, $1)?.confidence ?? 0 }
+            d.estimateRelative = { solver.solve($0, $1)?.rel ?? ($0.pose.inverse * $1.pose) }
+        }
         let candidates = detector.detect(frames, config: gConfig)
         lastStats.loopCandidates = candidates.count
         for c in candidates {

@@ -54,6 +54,7 @@
 		AB0000E2B368108700A75B9A /* GlobalOptimizationTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000E3B368108700A75B9A /* GlobalOptimizationTypes.swift */; };
 		AB0000E4B368108700A75B9A /* KeyframeRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000E5B368108700A75B9A /* KeyframeRecorder.swift */; };
 		AB0000E6B368108700A75B9A /* GlobalOptimizationPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000E7B368108700A75B9A /* GlobalOptimizationPipeline.swift */; };
+		AB0000F2B368108700A75B9A /* LoopClosureICP.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000F3B368108700A75B9A /* LoopClosureICP.swift */; };
 		AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000037B368108700A75B9A /* TaubinSmoothing.swift */; };
 		AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000039B368108700A75B9A /* QEMDecimation.swift */; };
 		AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00003BB368108700A75B9A /* ICPRefiner.swift */; };
@@ -121,6 +122,7 @@
 		AB0000E3B368108700A75B9A /* GlobalOptimizationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GlobalOptimizationTypes.swift; path = MedicalScan/ScanEngine/Export/GlobalOpt/GlobalOptimizationTypes.swift; sourceTree = "<group>"; };
 		AB0000E5B368108700A75B9A /* KeyframeRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyframeRecorder.swift; path = MedicalScan/ScanEngine/Export/GlobalOpt/KeyframeRecorder.swift; sourceTree = "<group>"; };
 		AB0000E7B368108700A75B9A /* GlobalOptimizationPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GlobalOptimizationPipeline.swift; path = MedicalScan/ScanEngine/Export/GlobalOpt/GlobalOptimizationPipeline.swift; sourceTree = "<group>"; };
+		AB0000F3B368108700A75B9A /* LoopClosureICP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoopClosureICP.swift; path = MedicalScan/ScanEngine/Export/GlobalOpt/LoopClosureICP.swift; sourceTree = "<group>"; };
 		AB000037B368108700A75B9A /* TaubinSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaubinSmoothing.swift; path = MedicalScan/ScanEngine/Meshing/TaubinSmoothing.swift; sourceTree = "<group>"; };
 		AB000039B368108700A75B9A /* QEMDecimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QEMDecimation.swift; path = MedicalScan/ScanEngine/Meshing/QEMDecimation.swift; sourceTree = "<group>"; };
 		AB00003BB368108700A75B9A /* ICPRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ICPRefiner.swift; path = MedicalScan/ScanEngine/Tracking/ICPRefiner.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 				AB0000E3B368108700A75B9A /* GlobalOptimizationTypes.swift */,
 				AB0000E5B368108700A75B9A /* KeyframeRecorder.swift */,
 				AB0000E7B368108700A75B9A /* GlobalOptimizationPipeline.swift */,
+				AB0000F3B368108700A75B9A /* LoopClosureICP.swift */,
 				AB000037B368108700A75B9A /* TaubinSmoothing.swift */,
 				AB000039B368108700A75B9A /* QEMDecimation.swift */,
 				AB00003BB368108700A75B9A /* ICPRefiner.swift */,
@@ -447,6 +450,7 @@
 				AB0000E2B368108700A75B9A /* GlobalOptimizationTypes.swift in Sources */,
 				AB0000E4B368108700A75B9A /* KeyframeRecorder.swift in Sources */,
 				AB0000E6B368108700A75B9A /* GlobalOptimizationPipeline.swift in Sources */,
+				AB0000F2B368108700A75B9A /* LoopClosureICP.swift in Sources */,
 				AB000036B368108700A75B9A /* TaubinSmoothing.swift in Sources */,
 				AB000038B368108700A75B9A /* QEMDecimation.swift in Sources */,
 				AB00003AB368108700A75B9A /* ICPRefiner.swift in Sources */,
@@ -465,7 +469,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 117;
+				CURRENT_PROJECT_VERSION = 118;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -496,7 +500,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 117;
+				CURRENT_PROJECT_VERSION = 118;
 				INFOPLIST_FILE = MedicalScan/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
