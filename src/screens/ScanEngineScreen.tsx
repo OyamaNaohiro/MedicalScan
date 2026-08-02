@@ -94,6 +94,7 @@ export default function ScanEngineScreen({
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string>('');
+  const [showControls, setShowControls] = useState(true); // デバッグボタン群の表示/非表示
 
   // 画面を離れたらスキャンを止める
   useFocusEffect(
@@ -218,6 +219,8 @@ export default function ScanEngineScreen({
         </View>
       )}
 
+      {showControls && (
+        <>
       {/* 対象モード（サイズ別プリセット。スキャン中は変更不可） */}
       <View style={styles.scanModeRow}>
         {SCAN_MODES.map(m => {
@@ -346,9 +349,16 @@ export default function ScanEngineScreen({
           onPress={() => setDecimate(0.1)}
         />
       </View>
+        </>
+      )}
 
-      {/* STL 保存 */}
+      {/* STL 保存（+ UI 表示トグル。常時表示） */}
       <View style={styles.filterRow}>
+        <FilterChip
+          label={showControls ? 'UI隠す' : 'UI表示'}
+          on={showControls}
+          onPress={() => setShowControls(p => !p)}
+        />
         <FilterChip
           label="STL"
           on={exportFormat === 0}
