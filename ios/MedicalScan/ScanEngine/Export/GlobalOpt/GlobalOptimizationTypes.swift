@@ -98,11 +98,12 @@ struct GlobalOptConfig {
     var keyframeMinInterval: TimeInterval = 0.2
     var maxKeyframes: Int = 400                // メモリ上限（超過で保持停止）
 
-    // ループ候補ゲート
+    // ループ候補ゲート（安価な粗ゲート。最終判定は ICP=featureMatch が行うので広めでよい）。
+    // ※ ドリフトがあると戻っても姿勢が離れて見えるため、狭いと候補0になる。広げて ICP に委ねる。
     var minFrameGap: Int = 20            // これ以上離れたキーフレーム同士のみ候補（隣接は除外）
-    var maxPoseDistance: Float = 0.15    // 位置がこの距離以内 [m]
-    var maxPoseAngle: Float = 0.6        // 姿勢角度差の上限 [rad] (~34°)
-    var minFeatureMatch: Float = 0.4     // 特徴一致率の下限（フック使用時）
+    var maxPoseDistance: Float = 0.35    // 位置がこの距離以内 [m]（0.15→0.35 でドリフト戻りも拾う）
+    var maxPoseAngle: Float = 1.0        // 姿勢角度差の上限 [rad] (~57°。0.6→1.0)
+    var minFeatureMatch: Float = 0.4     // 特徴一致率の下限（ICP 信頼度。偽ループはここで棄却）
 
     // PGO
     var pgoIterations: Int = 10
