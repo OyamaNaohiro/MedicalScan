@@ -157,6 +157,12 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// ARKit 相対運動 prior 用の前フレーム ARKit 姿勢。
     private var odomArkitPrev = matrix_identity_float4x4
 
+    // ライブ再ローカライズ（トラッキングを見失った時、過去の良好姿勢から合う場所を再探索）。
+    private var odomLost = false                       // ロスト中か
+    private var odomLostFrames = 0                     // 連続ロストフレーム数
+    private var odomLastGoodPose = matrix_identity_float4x4  // 直近で追従に成功した姿勢
+    private var odomGoodPoses: [simd_float4x4] = []    // 再ローカライズ候補（訪れた視点。間引き保持）
+
     /// 共有 GPU コンテキスト（プレビュー View 等が同一 device を使うために公開）。
     var metalContext: MetalContext { context }
 
@@ -235,6 +241,10 @@ final class ScanEngine: DepthFrameSourceDelegate {
         meshFrameCounter = 0
         odomTrackedPose = matrix_identity_float4x4   // 深度オドメトリの累積姿勢をリセット
         odomArkitPrev = matrix_identity_float4x4
+        odomLost = false                  // 再ローカライズ状態をリセット
+        odomLostFrames = 0
+        odomLastGoodPose = matrix_identity_float4x4
+        odomGoodPoses.removeAll()
         keyframeRecorder.reset()          // 大域最適化用キーフレームを破棄（有効時のみ蓄積）
         setState(.starting)
         source.start()
@@ -395,6 +405,30 @@ final class ScanEngine: DepthFrameSourceDelegate {
         let predicted = odomTrackedPose * arkitDelta
         odomArkitPrev = arkit
 
+        // ロスト中: 過去の良好姿勢から再探索し、合う場所が見つかればスナップして復帰。
+        // 見つからなければ数フレーム捨て、一定時間ダメならスキャンをリセット（最初から）。
+        if odomLost {
+            if let reloc = attemptRelocalize(frame, tsdf: tsdf) {
+                odomLost = false
+                odomLostFrames = 0
+                odomTrackedPose = reloc
+                recordGoodPose(reloc)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onEvent?("relocalized", "再ローカライズ成功。過去のメッシュへ再接続しました")
+                }
+                return (reloc, true)
+            }
+            odomLostFrames += 1
+            if odomLostFrames >= config.relocMaxLostFrames {
+                restartScan(currentARKit: arkit)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onEvent?("scanRestart", "再接続できずスキャンをリセットしました（最初から）")
+                }
+                return (predicted, false)
+            }
+            return (predicted, false)   // ロスト中はフレームを捨てる（統合しない）
+        }
+
         // ICP をフレーム→モデルで実行（予測を初期値）。
         let r = icpRefiner.refine(
             depth: frame.depth, mask: frame.validMask, volume: tsdf,
@@ -405,18 +439,73 @@ final class ScanEngine: DepthFrameSourceDelegate {
         case .ok:
             // 整合良好 → ICP 補正姿勢を採用（深度が真値）。
             odomTrackedPose = r.pose
+            recordGoodPose(r.pose)
             DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, true) }
             return (odomTrackedPose, true)
         case .aborted:
-            // モデル不足（初期）→ 予測姿勢で統合してモデルを育てる。
+            // モデル不足（初期/新規領域）→ 予測姿勢で統合してモデルを育てる。
             odomTrackedPose = predicted
             return (predicted, true)
         case .poor:
-            // 整合不良 → 予測姿勢は保持するが統合はスキップ（モデル保護）。
-            odomTrackedPose = predicted
-            DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, false) }
+            // 整合不良＝見失い → ロスト状態へ。統合せず、次フレームから再ローカライズを試みる。
+            odomLost = true
+            odomLostFrames = 1
+            DispatchQueue.main.async { [weak self] in
+                self?.onICPStats?(r.rms, r.correspondences, false)
+                self?.onEvent?("trackingLost", "追従を見失いました。再接続を試みます")
+            }
             return (predicted, false)
         }
+    }
+
+    /// 追従成功姿勢を記録する。直近姿勢を更新し、十分移動した時だけ候補リングへ追加（間引き・上限あり）。
+    private func recordGoodPose(_ pose: simd_float4x4) {
+        odomLastGoodPose = pose
+        if let last = odomGoodPoses.last,
+           PoseMath.distance(last, pose) < 0.05, PoseMath.angle(last, pose) < 0.17 {
+            return   // 前回候補から 5cm/10° 未満なら追加しない（多様な視点だけ保持）
+        }
+        odomGoodPoses.append(pose)
+        if odomGoodPoses.count > 24 { odomGoodPoses.removeFirst() }   // メモリ上限
+    }
+
+    /// 過去の良好姿勢を初期値に ICP を試し、最も整合の良い姿勢を返す（見つからなければ nil）。
+    /// 誤接続を防ぐため .ok かつ対応点数が relocMinCorrespondences 以上のものだけ採用する。
+    private func attemptRelocalize(_ frame: DepthFrame, tsdf: TSDFVolume) -> simd_float4x4? {
+        // 候補: 直近良好姿勢 ＋ リングから間引きサンプル（コスト上限 relocMaxCandidates）。
+        var candidates: [simd_float4x4] = [odomLastGoodPose]
+        if !odomGoodPoses.isEmpty {
+            let step = max(1, odomGoodPoses.count / max(1, config.relocMaxCandidates - 1))
+            var i = odomGoodPoses.count - 1
+            while i >= 0 && candidates.count < config.relocMaxCandidates {
+                candidates.append(odomGoodPoses[i]); i -= step
+            }
+        }
+
+        var best: (pose: simd_float4x4, rms: Float)?
+        for c in candidates {
+            let r = icpRefiner.refine(
+                depth: frame.depth, mask: frame.validMask, volume: tsdf,
+                intrinsics: frame.intrinsics, width: frame.width, height: frame.height,
+                vioPose: c, config: config, context: context)
+            guard r.status == .ok, r.correspondences >= config.relocMinCorrespondences else { continue }
+            if best == nil || r.rms < best!.rms { best = (r.pose, r.rms) }
+        }
+        return best?.pose
+    }
+
+    /// スキャンを最初からやり直す（ボリュームをクリアして再ブートストラップ）。
+    private func restartScan(currentARKit arkit: simd_float4x4) {
+        if let t = tsdf, let cb = context.commandQueue.makeCommandBuffer() {
+            t.clear(commandBuffer: cb)   // isPositioned=false → 次フレームで再ブートストラップ
+            cb.commit()
+        }
+        odomLost = false
+        odomLostFrames = 0
+        odomTrackedPose = matrix_identity_float4x4
+        odomArkitPrev = arkit
+        odomGoodPoses.removeAll()
+        meshFrameCounter = 0
     }
 
     // MARK: - DepthFrameSourceDelegate

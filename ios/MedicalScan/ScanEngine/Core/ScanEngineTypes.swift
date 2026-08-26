@@ -209,6 +209,11 @@ struct ScanConfig {
     /// min(truncation, icpOkMaxRms)。truncation を厚くしても、これを超えてズレたフレームは
     /// 統合せずスキップしてモデルを守る（二重壁抑制）。既定は事実上無効化した大きな値。
     var icpOkMaxRms: Float = 1.0
+
+    // ライブ再ローカライズ（深度オドメトリがロストした時の復帰）
+    var relocMinCorrespondences: Int = 400  // 再ローカライズ採用の最小対応点数（誤接続を防ぐ厳しめ）
+    var relocMaxLostFrames: Int = 60        // これ以上ロストが続いたらスキャンをリセット（~2秒@30fps）
+    var relocMaxCandidates: Int = 5         // 1 ロストフレームで試す候補姿勢の最大数（コスト上限）
     /// ARKit 予測運動への事前分布の相対重み。劣決定方向の安定化を狙ったが、引き戻し先の ARKit
     /// 自体がドリフトするため、深度オドメトリに ARKit ドリフトを再注入してしまい全モードで劣化した
     /// （ビルド105→107で撤回）。0=無効。将来は引き戻し先を定速度モデル(深度オドメトリ自身)にすべき。
