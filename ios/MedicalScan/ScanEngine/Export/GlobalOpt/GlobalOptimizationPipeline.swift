@@ -161,6 +161,7 @@ final class GlobalOptimizationPipeline {
     var detector: LoopClosureDetector = DefaultLoopClosureDetector()
     var optimizer: PoseGraphOptimizer = DefaultPoseGraphOptimizer()
     private let reintegrator = TSDFReintegrator()
+    private let smoother = TSDFSmoother()   // ライブ経路と同じ SDF 平滑化（再統合メッシュのぼこぼこ防止）
 
     /// 直近 run() の統計（呼び出し後に読む）。
     private(set) var lastStats = GlobalOptStats()
@@ -214,10 +215,16 @@ final class GlobalOptimizationPipeline {
         }
         reintegrator.reintegrate(frames, into: volume, config: config, context: context)
 
-        // 4) 再メッシュ（Marching Cubes）→ 頂点スープを読み戻す。
+        // 4) 再メッシュ（Marching Cubes）。ライブ経路と同じく SDF 平滑化を通してから MC し、
+        //    再統合メッシュがぼこぼこにならないようにする（＝ループ補正の効果 × ライブ同等の滑らかさ）。
         guard let extractor = MarchingCubesExtractor(device: context.device),
               let cb = context.commandQueue.makeCommandBuffer() else { return nil }
-        _ = extractor.extract(volume: volume, sourceBuffer: volume.voxelBuffer, config: config,
+        var source = volume.voxelBuffer
+        if let smoothed = smoother.smooth(volume: volume, config: config,
+                                          commandBuffer: cb, context: context) {
+            source = smoothed
+        }
+        _ = extractor.extract(volume: volume, sourceBuffer: source, config: config,
                               commandBuffer: cb, context: context)
         cb.commit()
         cb.waitUntilCompleted()
