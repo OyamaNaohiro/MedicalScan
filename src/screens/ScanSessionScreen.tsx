@@ -60,6 +60,10 @@ export default function ScanSessionScreen() {
   const [rangeMax, setRangeMax] = useState(0.45);
   const [tracking, setTracking] = useState('-');
   const [triangles, setTriangles] = useState(0);
+  // 再ローカライズ状態: ok(通常) / lost(見失い中) / relocalized(再接続成功) / restart(リセット)
+  const [relocStatus, setRelocStatus] = useState<
+    'ok' | 'lost' | 'relocalized' | 'restart'
+  >('ok');
 
   // タブを離れたら停止。
   useFocusEffect(
@@ -85,10 +89,23 @@ export default function ScanSessionScreen() {
         Alert.alert('保存しました', event.path);
       } else if (event.type === 'engineError') {
         Alert.alert('エラー', event.message);
+      } else if (event.type === 'engineLog') {
+        // 再ローカライズの状態をバナー表示へ反映。
+        if (event.kind === 'trackingLost') setRelocStatus('lost');
+        else if (event.kind === 'relocalized') setRelocStatus('relocalized');
+        else if (event.kind === 'scanRestart') setRelocStatus('restart');
       }
     });
     return () => sub.remove();
   }, []);
+
+  // relocalized / restart は一時表示（2秒で ok に戻す）。lost はエンジンが解消するまで保持。
+  useEffect(() => {
+    if (relocStatus === 'relocalized' || relocStatus === 'restart') {
+      const t = setTimeout(() => setRelocStatus('ok'), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [relocStatus]);
 
   // 距離状態の判定。
   let distState: DistState = 'none';
@@ -185,8 +202,27 @@ export default function ScanSessionScreen() {
       {/* ─── スキャン画面: 距離ガイド + 操作 ───────────────── */}
       {inSession && (
         <>
-          {/* トラッキング警告（スキャン中のみ） */}
-          {isScanning && !trackingOk && (
+          {/* 再ローカライズ状態バナー（スキャン中・状態が ok 以外のとき優先表示） */}
+          {isScanning && relocStatus !== 'ok' && (
+            <View
+              style={[
+                styles.relocBanner,
+                relocStatus === 'lost' && {backgroundColor: 'rgba(255,159,10,0.95)'},
+                relocStatus === 'relocalized' && {backgroundColor: 'rgba(48,209,88,0.95)'},
+                relocStatus === 'restart' && {backgroundColor: 'rgba(255,69,58,0.95)'},
+              ]}>
+              <Text style={styles.relocBannerText}>
+                {relocStatus === 'lost'
+                  ? '⚠ 追従を見失いました — 元の位置・向きに戻してください'
+                  : relocStatus === 'relocalized'
+                  ? '✓ 再接続しました'
+                  : 'スキャンをリセットしました（最初から）'}
+              </Text>
+            </View>
+          )}
+
+          {/* トラッキング警告（スキャン中・再ローカライズ表示が無いときのみ） */}
+          {isScanning && relocStatus === 'ok' && !trackingOk && (
             <View style={styles.trackWarn}>
               <Text style={styles.trackWarnText}>
                 トラッキング不安定（{tracking}）: ゆっくり動かし、対象を画面内に保ってください
@@ -247,7 +283,10 @@ export default function ScanSessionScreen() {
             {/* 開始/停止トグル（Engineタブと同じ。画面は切り替えない） */}
             <TouchableOpacity
               style={[styles.scanToggle, isScanning && styles.scanToggleStop]}
-              onPress={() => setIsScanning(p => !p)}>
+              onPress={() => {
+                setRelocStatus('ok');
+                setIsScanning(p => !p);
+              }}>
               <Text style={styles.scanToggleText}>{isScanning ? '停止' : '開始'}</Text>
             </TouchableOpacity>
 
@@ -321,6 +360,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   trackWarnText: {color: '#000', fontSize: 12, fontWeight: '600', textAlign: 'center'},
+
+  // 再ローカライズ状態バナー
+  relocBanner: {
+    position: 'absolute',
+    top: 70,
+    left: 16,
+    right: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  relocBannerText: {color: '#000', fontSize: 13, fontWeight: '700', textAlign: 'center'},
 
   // 距離リング
   ringWrap: {
