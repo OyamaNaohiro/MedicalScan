@@ -221,6 +221,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
         engine.meshExtractor = MarchingCubesExtractor(device: context.device)
         // エクスポート後処理（保存時のみ。リアルタイムには影響しない）。
         engine.exportPipeline.append(VertexWeld())        // 溶接でインデックス化
+        engine.exportPipeline.append(ComponentFilter())   // 本体から分離したゴースト成分を削除
         engine.exportPipeline.append(HoleFilling())       // 小さな穴を塞ぐ（境界検出→重心ファン）
         engine.exportPipeline.append(TaubinSmoothing())   // λ/μ 平滑化（穴埋め後に馴染ませる）
         engine.exportPipeline.append(engine.decimator)    // QEM 削減（既定は無効）
