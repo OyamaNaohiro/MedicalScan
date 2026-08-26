@@ -441,8 +441,29 @@ final class ScanEngine: DepthFrameSourceDelegate {
             // 整合良好 → ICP 補正姿勢を採用（深度が真値）。
             odomTrackedPose = r.pose
             recordGoodPose(r.pose)
-            DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, true) }
-            return (odomTrackedPose, true)
+
+            // 交差ガード: ICP は局所的に合っても、重なり点のうち表面に乗る割合が低ければ
+            // ＝既存モデルと交差／矛盾している。その場合は新フレームを捨て、既存メッシュを採用する。
+            // （新規領域は overlap が少ないので gateMinOverlap 未満＝無条件統合で育つ。）
+            var integrate = true
+            if connectGate {
+                let ev = icpRefiner.evaluate(
+                    depth: frame.depth, mask: frame.validMask, volume: tsdf,
+                    intrinsics: frame.intrinsics, width: frame.width, height: frame.height,
+                    pose: r.pose, config: config, context: context)
+                if ev.observed >= config.gateMinOverlap {
+                    let ratio = Float(ev.agree) / Float(max(1, ev.observed))
+                    if ratio < config.gateAgreeRatio {
+                        integrate = false   // 交差 → 既存を採用（この矛盾フレームは統合しない）
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onEvent?("conflictSkipped",
+                                "既存メッシュと交差するフレームを破棄（一致率 \(Int(ratio * 100))%）")
+                        }
+                    }
+                }
+            }
+            DispatchQueue.main.async { [weak self] in self?.onICPStats?(r.rms, r.correspondences, integrate) }
+            return (odomTrackedPose, integrate)
         case .aborted:
             // モデル不足（初期/新規領域）→ 予測姿勢で統合してモデルを育てる。
             odomTrackedPose = predicted

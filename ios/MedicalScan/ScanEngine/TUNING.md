@@ -16,7 +16,7 @@
 | Gate（整合ゲート） | ON | **※DepthOdom ON時は不使用**（VIO主軸パス専用） |
 | ICP | ON | **※DepthOdom ON時は不使用**（VIO主軸パス専用。odom側は常時ICP） |
 
-> 重要: **DepthOdom ON のとき、Gate/ICP トグルは効きません**。姿勢決定は `trackDepthOdometry`（常時ICP）に一本化され、`connectGate`/`icpEnabled` を参照する分岐（`currentTracking == .normal` 側）には入らないため。
+> 重要: **DepthOdom ON のとき、姿勢決定は `trackDepthOdometry`（常時ICP）に一本化**される（`icpEnabled` トグルは不使用）。ただし **`connectGate` は DepthOdom 経路でも「交差ガード」として有効**（ビルド125〜）: ICP .ok でも重なり点の表面一致率が `gateAgreeRatio` 未満なら＝既存モデルと交差とみなし、その矛盾フレームを統合スキップ（既存メッシュを採用）。
 
 ---
 
