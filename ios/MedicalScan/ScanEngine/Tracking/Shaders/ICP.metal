@@ -58,16 +58,16 @@ kernel void icpReduceKernel(
         texture2d<float, access::read>  maskTex  [[texture(1)]],
         device const TSDFVoxelRO*       voxels   [[buffer(0)]],
         constant ICPUniforms&           u        [[buffer(1)]],
-        device float*                   partial  [[buffer(2)]],  // [thread*29]
+        device float*                   partial  [[buffer(2)]],  // [thread*39]
         constant uint&                  hasMask  [[buffer(3)]],
         uint2 gid [[thread_position_in_grid]]) {
 
     uint gw = (u.depthW + u.stride - 1) / u.stride;
     uint gh = (u.depthH + u.stride - 1) / u.stride;
     if (gid.x >= gw || gid.y >= gh) return;
-    // 30値: A上三角(21) + b(6) + err(1) + agree(1) + observed(1)
-    uint outBase = (gid.y * gw + gid.x) * 30u;
-    for (uint k = 0; k < 30; k++) partial[outBase + k] = 0.0;
+    // 39値: A上三角(21)+b(6)+err(1)+agree(1)+observed(1) + 一致点モーメント[Σp(3)+Σp⊗p上三角(6)]
+    uint outBase = (gid.y * gw + gid.x) * 39u;
+    for (uint k = 0; k < 39; k++) partial[outBase + k] = 0.0;
 
     uint px = gid.x * u.stride, py = gid.y * u.stride;
     if (px >= u.depthW || py >= u.depthH) return;
@@ -124,4 +124,16 @@ kernel void icpReduceKernel(
         partial[o++] = -w * J[j] * r;
     partial[o++] = r * r;
     partial[o++] = 1.0;
+
+    // 立体性ゲート用: 一致点(world)の1次・2次モーメント。CPU で共分散→最小固有値を評価し、
+    // 平面・直線的な退化領域での誤った再ローカライズ（壁同士の誤接続）を弾く。
+    partial[outBase + 30] = pw.x;
+    partial[outBase + 31] = pw.y;
+    partial[outBase + 32] = pw.z;
+    partial[outBase + 33] = pw.x * pw.x;
+    partial[outBase + 34] = pw.x * pw.y;
+    partial[outBase + 35] = pw.x * pw.z;
+    partial[outBase + 36] = pw.y * pw.y;
+    partial[outBase + 37] = pw.y * pw.z;
+    partial[outBase + 38] = pw.z * pw.z;
 }

@@ -9,6 +9,7 @@
 //  GPU カーネルが点ごとの正規方程式寄与(29値)を出力 → CPU で総和・6x6 求解・姿勢更新。
 //
 
+import Foundation
 import Metal
 import simd
 
@@ -21,6 +22,9 @@ struct ICPResult {
     /// .poor=整合不良(統合スキップして既存メッシュを保護)
     enum Status { case aborted, ok, poor }
     var status: Status
+    /// 一致点群の立体性 = 共分散の最小固有値の平方根[m]（最も薄い方向の広がりの標準偏差）。
+    /// 平面・直線的な退化領域では小さくなる。再ローカライズの誤接続防止に使う。
+    var geometricSpread: Float = 0
 }
 
 final class ICPRefiner {
@@ -37,6 +41,11 @@ final class ICPRefiner {
         var minWeight: Float
         var depthMin: Float; var depthMax: Float
     }
+
+    // reduce カーネルの 1 スレッド出力数（Metal 側と一致）:
+    // A上三角(21)+b(6)+err(1)+agree(1)+observed(1)=29 → index0..28, observed=29,
+    // + 一致点モーメント Σp(3)+Σp⊗p上三角(6)=9 → index30..38。計 39。
+    static let reduceFloats = 39
 
     // しきい値（発散検出）。
     private let minCorrespondences = 200
@@ -56,13 +65,14 @@ final class ICPRefiner {
         let stride = max(2, config.icpStride)
         let gw = (width + stride - 1) / stride
         let gh = (height + stride - 1) / stride
-        let needed = gw * gh * 30
+        let needed = gw * gh * Self.reduceFloats
         guard ensurePartial(count: needed, device: context.device), let partial else { return abortResult }
 
         var T = vioPose
         var improved = false
         var lastRms: Float = 0
         var lastCount = 0
+        var lastSpread: Float = 0
 
         for _ in 0..<max(1, config.icpIterations) {
             var u = Uniforms(
@@ -77,7 +87,7 @@ final class ICPRefiner {
 
             guard let cb = context.commandQueue.makeCommandBuffer(),
                   let enc = cb.makeComputeCommandEncoder() else {
-                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+                return improved ? makeResult(T, lastRms, lastCount, lastSpread, config) : abortResult
             }
             enc.setComputePipelineState(pso)
             enc.setTexture(depth, index: 0)
@@ -95,17 +105,18 @@ final class ICPRefiner {
 
             // 総和（A 上三角21, b 6, err 1, agree 1, observed 1）。
             let ptr = partial.contents().bindMemory(to: Float.self, capacity: needed)
-            var acc = [Double](repeating: 0, count: 30)
+            var acc = [Double](repeating: 0, count: Self.reduceFloats)
             let entries = gw * gh
             for i in 0..<entries {
-                let base = i * 30
-                for k in 0..<30 { acc[k] += Double(ptr[base + k]) }
+                let base = i * Self.reduceFloats
+                for k in 0..<Self.reduceFloats { acc[k] += Double(ptr[base + k]) }
             }
             let count = Int(acc[28])
             lastCount = count
             lastRms = count > 0 ? Float((acc[27] / Double(count)).squareRoot()) : 0
+            lastSpread = ICPRefiner.geometricSpread(acc: acc, count: count)
             if count < minCorrespondences {
-                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+                return improved ? makeResult(T, lastRms, lastCount, lastSpread, config) : abortResult
             }
 
             // 6x6 対称 A・b を構築。
@@ -151,26 +162,27 @@ final class ICPRefiner {
             let omega = SIMD3<Float>(Float(xi[0]), Float(xi[1]), Float(xi[2]))
             let trans = SIMD3<Float>(Float(xi[3]), Float(xi[4]), Float(xi[5]))
             if !omega.x.isFinite || !trans.x.isFinite {
-                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+                return improved ? makeResult(T, lastRms, lastCount, lastSpread, config) : abortResult
             }
             if simd_length(omega) > maxRotation || simd_length(trans) > maxTranslation {
-                return improved ? makeResult(T, lastRms, lastCount, config) : abortResult  // 発散
+                return improved ? makeResult(T, lastRms, lastCount, lastSpread, config) : abortResult  // 発散
             }
 
             T = ICPRefiner.orthonormalized(ICPRefiner.delta(omega: omega, trans: trans) * T)
             improved = true
         }
-        return improved ? makeResult(T, lastRms, lastCount, config) : abortResult
+        return improved ? makeResult(T, lastRms, lastCount, lastSpread, config) : abortResult
     }
 
     /// 残差 RMS が採用しきい値以下なら .ok（pose で統合）、超なら .poor（統合スキップ）。
     /// しきい値は min(truncation, icpOkMaxRms)。truncation を厚くしても、ドリフトゲート
     /// (icpOkMaxRms) を超えてズレたフレームは統合しない（二重壁抑制）。
     private func makeResult(_ pose: simd_float4x4, _ rms: Float, _ corr: Int,
-                            _ config: ScanConfig) -> ICPResult {
+                            _ spread: Float, _ config: ScanConfig) -> ICPResult {
         let okThresh = min(config.truncation, config.icpOkMaxRms)
         let status: ICPResult.Status = rms <= okThresh ? .ok : .poor
-        return ICPResult(pose: pose, rms: rms, correspondences: corr, status: status)
+        return ICPResult(pose: pose, rms: rms, correspondences: corr,
+                         status: status, geometricSpread: spread)
     }
 
     /// 姿勢は動かさず、与えた pose での既存モデルとの整合度のみ評価する（整合ゲート用）。
@@ -184,7 +196,7 @@ final class ICPRefiner {
         let stride = max(2, config.icpStride)
         let gw = (width + stride - 1) / stride
         let gh = (height + stride - 1) / stride
-        let needed = gw * gh * 30
+        let needed = gw * gh * Self.reduceFloats
         guard ensurePartial(count: needed, device: context.device), let partial else { return (0, 0, 0) }
 
         var u = Uniforms(
@@ -217,7 +229,7 @@ final class ICPRefiner {
         var sumErr = 0.0, sumAgree = 0.0, sumObs = 0.0
         let entries = gw * gh
         for i in 0..<entries {
-            let base = i * 30
+            let base = i * Self.reduceFloats
             sumErr += Double(ptr[base + 27])
             sumAgree += Double(ptr[base + 28])
             sumObs += Double(ptr[base + 29])
@@ -234,6 +246,50 @@ final class ICPRefiner {
         partial = buf
         partialCapacity = count
         return true
+    }
+
+    // MARK: - 立体性（一致点群の共分散の最小固有値の平方根）
+
+    /// reduce の累積（acc[30..38]=Σp と Σp⊗p、count=一致点数）から一致点群の共分散を作り、
+    /// その最小固有値の平方根[m]（最も薄い方向の広がり std）を返す。平面/直線では小さくなる。
+    static func geometricSpread(acc: [Double], count: Int) -> Float {
+        guard count >= 3, acc.count >= 39 else { return 0 }
+        let n = Double(count)
+        let mx = acc[30] / n, my = acc[31] / n, mz = acc[32] / n
+        // 共分散 = E[p⊗p] - E[p]⊗E[p]（対称 3x3）。
+        let cxx = acc[33] / n - mx * mx
+        let cxy = acc[34] / n - mx * my
+        let cxz = acc[35] / n - mx * mz
+        let cyy = acc[36] / n - my * my
+        let cyz = acc[37] / n - my * mz
+        let czz = acc[38] / n - mz * mz
+        let lmin = smallestEigenSym3(cxx, cxy, cxz, cyy, cyz, czz)
+        return Float(lmin > 0 ? lmin.squareRoot() : 0)
+    }
+
+    /// 対称 3x3 行列の最小固有値（解析解・トリゴノメトリ法）。
+    private static func smallestEigenSym3(_ a11: Double, _ a12: Double, _ a13: Double,
+                                          _ a22: Double, _ a23: Double, _ a33: Double) -> Double {
+        let p1 = a12 * a12 + a13 * a13 + a23 * a23
+        if p1 < 1e-18 {   // 対角 → 固有値は対角成分
+            return min(a11, min(a22, a33))
+        }
+        let q = (a11 + a22 + a33) / 3.0
+        let p2 = (a11 - q) * (a11 - q) + (a22 - q) * (a22 - q) + (a33 - q) * (a33 - q) + 2.0 * p1
+        let p = (p2 / 6.0).squareRoot()
+        guard p > 1e-18 else { return q }
+        // B = (1/p)(A - qI)
+        let b11 = (a11 - q) / p, b22 = (a22 - q) / p, b33 = (a33 - q) / p
+        let b12 = a12 / p, b13 = a13 / p, b23 = a23 / p
+        // det(B)/2
+        let det = b11 * (b22 * b33 - b23 * b23)
+                - b12 * (b12 * b33 - b23 * b13)
+                + b13 * (b12 * b23 - b22 * b13)
+        let r = max(-1.0, min(1.0, det / 2.0))
+        let phi = acos(r) / 3.0
+        // 最小固有値は eig3 = q + 2p·cos(phi + 2π/3)
+        let eig3 = q + 2.0 * p * cos(phi + 2.0 * Double.pi / 3.0)
+        return eig3
     }
 
     // MARK: - 線形代数

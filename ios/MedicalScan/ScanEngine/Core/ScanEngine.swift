@@ -510,7 +510,10 @@ final class ScanEngine: DepthFrameSourceDelegate {
                 depth: frame.depth, mask: frame.validMask, volume: tsdf,
                 intrinsics: frame.intrinsics, width: frame.width, height: frame.height,
                 vioPose: c, config: config, context: context)
-            guard r.status == .ok, r.correspondences >= config.relocMinCorrespondences else { continue }
+            // 採用条件: .ok かつ 対応点数十分 かつ 立体性十分（平面/直線での誤接続を弾く）。
+            guard r.status == .ok,
+                  r.correspondences >= config.relocMinCorrespondences,
+                  r.geometricSpread >= config.relocMinSpread else { continue }
             if best == nil || r.rms < best!.rms { best = (r.pose, r.rms) }
         }
         return best?.pose

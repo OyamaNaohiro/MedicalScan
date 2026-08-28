@@ -212,6 +212,9 @@ struct ScanConfig {
 
     // ライブ再ローカライズ（深度オドメトリがロストした時の復帰）
     var relocMinCorrespondences: Int = 400  // 再ローカライズ採用の最小対応点数（誤接続を防ぐ厳しめ）
+    /// 再ローカライズ採用に必要な一致点群の立体性[m]（共分散の最小固有値の平方根＝最も薄い方向の広がり）。
+    /// 平面・直線的な退化領域（壁・床）では小さくなるため、誤接続（壁同士など）を弾く。
+    var relocMinSpread: Float = 0.015
     var relocMaxLostFrames: Int = 60        // これ以上ロストが続いたらスキャンをリセット（~2秒@30fps）
     var relocMaxCandidates: Int = 5         // 1 ロストフレームで試す候補姿勢の最大数（コスト上限）
     /// ARKit 予測運動への事前分布の相対重み。劣決定方向の安定化を狙ったが、引き戻し先の ARKit
