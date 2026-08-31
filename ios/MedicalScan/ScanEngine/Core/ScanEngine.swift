@@ -541,7 +541,7 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // MARK: - DepthFrameSourceDelegate
 
-    func depthFrameSource(_ source: DepthFrameSource, didOutput frame frameIn: DepthFrame) {
+    func depthFrameSource(_ source: DepthFrameSource, didOutput frameIn: DepthFrame) {
         // 品質の低いフレームは早期に足切り（無駄な GPU 処理を避ける）。
         guard frameIn.quality >= config.qualityMin else {
             DispatchQueue.main.async { [weak self] in
