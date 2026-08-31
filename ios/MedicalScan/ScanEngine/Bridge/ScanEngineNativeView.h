@@ -24,6 +24,7 @@
 @property (nonatomic) BOOL globalOptimize;
 @property (nonatomic) BOOL worldTracking;
 @property (nonatomic) BOOL depthOdometry;
+@property (nonatomic) BOOL mirrorMode;
 @property (nonatomic) BOOL colorBaking;
 @property (nonatomic) NSInteger exportFormat;
 @property (nonatomic) double exportRequest;

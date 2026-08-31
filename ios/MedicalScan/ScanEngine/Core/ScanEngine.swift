@@ -149,6 +149,12 @@ final class ScanEngine: DepthFrameSourceDelegate {
     /// 現在のスキャンモード（対象サイズ別プリセット）。既定は上半身（従来値）。
     private(set) var scanMode: ScanMode = .upperBody
 
+    // ミラー撮影モード（画面側上部の 45°ミラーで前面 TrueDepth を上方へ折り返して撮る用）。
+    /// ON でカメラ姿勢に回転補正を掛け、折り返しで生じるモデルの向きずれ（回転）を正す。
+    var mirrorModeEnabled = false
+    /// ミラー補正の回転（カメラ空間・X 軸周り +90°）。向きが合わなければ符号/軸を調整する。
+    private let mirrorRotation = simd_float4x4(simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0)))
+
     // 深度オドメトリ主軸（ICP をフレーム→モデルの主トラッカーにし、姿勢を累積する）。
     /// ON で深度オドメトリを主軸にする（ARKit は相対運動 prior のみ。長期ドリフトから独立）。既定 OFF。
     var depthOdometryEnabled = false
@@ -535,13 +541,19 @@ final class ScanEngine: DepthFrameSourceDelegate {
 
     // MARK: - DepthFrameSourceDelegate
 
-    func depthFrameSource(_ source: DepthFrameSource, didOutput frame: DepthFrame) {
+    func depthFrameSource(_ source: DepthFrameSource, didOutput frame frameIn: DepthFrame) {
         // 品質の低いフレームは早期に足切り（無駄な GPU 処理を避ける）。
-        guard frame.quality >= config.qualityMin else {
+        guard frameIn.quality >= config.qualityMin else {
             DispatchQueue.main.async { [weak self] in
                 self?.onEvent?("depthQualityLow", "深度品質が低くフレームを破棄しました")
             }
             return
+        }
+
+        // ミラーモード: カメラ姿勢を回転補正（トラッキング・統合・表示すべてこの補正姿勢で一貫）。
+        var frame = frameIn
+        if mirrorModeEnabled {
+            frame.cameraToWorld = frame.cameraToWorld * mirrorRotation
         }
 
         // フィルタチェーン（各フィルタが専用 command buffer で encode/commit）。

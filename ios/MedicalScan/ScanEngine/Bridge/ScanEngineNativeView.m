@@ -122,6 +122,11 @@
   [_impl setValue:@(depthOdometry) forKey:@"depthOdometry"];
 }
 
+- (void)setMirrorMode:(BOOL)mirrorMode {
+  _mirrorMode = mirrorMode;
+  [_impl setValue:@(mirrorMode) forKey:@"mirrorMode"];
+}
+
 - (void)setColorBaking:(BOOL)colorBaking {
   _colorBaking = colorBaking;
   [_impl setValue:@(colorBaking) forKey:@"colorBaking"];

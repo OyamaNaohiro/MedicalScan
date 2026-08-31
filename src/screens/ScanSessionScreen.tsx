@@ -1,5 +1,12 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  useWindowDimensions,
+} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import {ScanEnginePreview, DepthDisplayMode, ScanMode} from '../native/ScanEnginePreview';
@@ -51,8 +58,15 @@ export default function ScanSessionScreen() {
   const [inSession, setInSession] = useState(false); // false:モード選択 true:スキャン画面
   const [isScanning, setIsScanning] = useState(false); // 実際の統合(engine.start/stop)
   const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(3D表示)
+  const [mirror, setMirror] = useState(false); // 45°ミラー撮影モード
   const [exportFormat, setExportFormat] = useState(0); // 0:STLバイナリ 2:PLY(色付き)
   const [exportReq, setExportReq] = useState(0);
+
+  // ミラーが画面上部の約2割を隠すため、表示・UIを下側8割へ寄せる（高さの20%だけ上を空ける）。
+  const {height: winHeight} = useWindowDimensions();
+  const stageStyle = mirror
+    ? {position: 'absolute' as const, top: winHeight * 0.2, left: 0, right: 0, bottom: 0}
+    : StyleSheet.absoluteFillObject;
 
   // 距離ガイド・進捗の計測値。
   const [centerDepth, setCenterDepth] = useState(0);
@@ -139,6 +153,8 @@ export default function ScanSessionScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+     {/* ミラー時は表示・UIを下側8割へ寄せる（上2割はミラーで隠れるため）。 */}
+     <View style={stageStyle}>
       {/* 常時マウント（エンジン・ボリュームを安定させる）。開始前は上に選択UIを重ねる。 */}
       {/* 推奨設定を固定適用: World OFF / GlobalOpt OFF / DepthOdom ON / Color ON。 */}
       <ScanEnginePreview
@@ -152,6 +168,7 @@ export default function ScanSessionScreen() {
         globalOptimize={false}
         depthOdometry={true}
         colorBaking={true}
+        mirrorMode={mirror}
         exportFormat={exportFormat}
         exportRequest={exportReq}
       />
@@ -186,6 +203,15 @@ export default function ScanSessionScreen() {
               );
             })}
           </View>
+
+          {/* ミラー撮影モード（45°ミラーで前面センサーを上方へ折り返す）。向き補正＋UIを下寄せ。 */}
+          <TouchableOpacity
+            style={[styles.mirrorToggle, mirror && styles.mirrorToggleActive]}
+            onPress={() => setMirror(p => !p)}>
+            <Text style={[styles.mirrorToggleText, mirror && styles.mirrorToggleTextActive]}>
+              {mirror ? '🪞 ミラー撮影: ON' : '🪞 ミラー撮影: OFF'}
+            </Text>
+          </TouchableOpacity>
 
           {/* 画面を切り替えるだけ。スキャン(統合)はスキャン画面の開始ボタンで行う。 */}
           <TouchableOpacity
@@ -297,6 +323,7 @@ export default function ScanSessionScreen() {
           </View>
         </>
       )}
+     </View>
     </SafeAreaView>
   );
 }
@@ -340,6 +367,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modeCheckText: {color: '#fff', fontSize: 15, fontWeight: '800'},
+  mirrorToggle: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#2c2c3a',
+    backgroundColor: '#1c1c28',
+    marginBottom: 20,
+  },
+  mirrorToggleActive: {borderColor: '#5e5ce6', backgroundColor: 'rgba(94,92,230,0.14)'},
+  mirrorToggleText: {color: '#888', fontSize: 15, fontWeight: '700'},
+  mirrorToggleTextActive: {color: '#fff'},
   startButton: {
     backgroundColor: '#5e5ce6',
     paddingHorizontal: 48,

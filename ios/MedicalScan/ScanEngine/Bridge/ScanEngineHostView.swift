@@ -134,6 +134,11 @@ final class ScanEngineHostView: UIView {
         didSet { engine?.depthOdometryEnabled = depthOdometry }
     }
 
+    /// ミラー撮影モード（45°ミラーで前面センサーを上方へ折り返す）。姿勢に回転補正を掛ける。
+    @objc var mirrorMode: Bool = false {
+        didSet { engine?.mirrorModeEnabled = mirrorMode }
+    }
+
     /// カラー焼き込みの ON/OFF。ON でカメラ映像をメッシュに頂点カラーとして焼き込む。既定 OFF。
     @objc var colorBaking: Bool = false {
         didSet { engine?.colorBakingEnabled = colorBaking }
@@ -267,6 +272,7 @@ final class ScanEngineHostView: UIView {
         engine?.globalOptimizationEnabled = globalOptimize
         engine?.worldTrackingEnabled = worldTracking
         engine?.depthOdometryEnabled = depthOdometry
+        engine?.mirrorModeEnabled = mirrorMode
         engine?.colorBakingEnabled = colorBaking
         engine?.exportDecimateRatio = Float(decimateRatio)
     }

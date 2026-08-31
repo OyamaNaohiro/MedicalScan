@@ -43,6 +43,7 @@ interface ScanEnginePreviewProps {
   globalOptimize?: boolean; // 大域最適化(ループ閉じ込み+PGO) 保存時 ON/OFF
   worldTracking?: boolean; // ワールドトラッキング(6DOF姿勢) ON/OFF(開始前に設定)
   depthOdometry?: boolean; // 深度オドメトリ主軸(ICPをフレーム→モデルの主トラッカーに)
+  mirrorMode?: boolean; // ミラー撮影モード(45°ミラーで前面センサーを上方へ折り返す。姿勢を回転補正)
   colorBaking?: boolean; // カラー焼き込み(カメラ映像を頂点カラーに)
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
@@ -79,6 +80,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   globalOptimize = false,
   worldTracking = true,
   depthOdometry = false,
+  mirrorMode = false,
   colorBaking = false,
   exportFormat = 0,
   exportRequest = 0,
@@ -109,6 +111,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       globalOptimize={globalOptimize}
       worldTracking={worldTracking}
       depthOdometry={depthOdometry}
+      mirrorMode={mirrorMode}
       colorBaking={colorBaking}
       exportFormat={exportFormat}
       exportRequest={exportRequest}
