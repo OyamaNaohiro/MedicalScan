@@ -127,6 +127,11 @@
   [_impl setValue:@(mirrorMode) forKey:@"mirrorMode"];
 }
 
+- (void)setMirrorRoll:(NSInteger)mirrorRoll {
+  _mirrorRoll = mirrorRoll;
+  [_impl setValue:@(mirrorRoll) forKey:@"mirrorRoll"];
+}
+
 - (void)setColorBaking:(BOOL)colorBaking {
   _colorBaking = colorBaking;
   [_impl setValue:@(colorBaking) forKey:@"colorBaking"];

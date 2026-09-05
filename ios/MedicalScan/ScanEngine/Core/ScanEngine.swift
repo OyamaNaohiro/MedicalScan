@@ -152,8 +152,13 @@ final class ScanEngine: DepthFrameSourceDelegate {
     // ミラー撮影モード（画面側上部の 45°ミラーで前面 TrueDepth を上方へ折り返して撮る用）。
     /// ON でカメラ姿勢に回転補正を掛け、折り返しで生じるモデルの向きずれ（回転）を正す。
     var mirrorModeEnabled = false
-    /// ミラー補正の回転（カメラ空間・X 軸周り +90°）。向きが合わなければ符号/軸を調整する。
-    private let mirrorRotation = simd_float4x4(simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0)))
+    /// ミラー補正の画面平面ロール（0/1/2/3 = 0/90/180/270°）。実機で正しい向きを選ぶ。
+    var mirrorRoll = 0
+    /// 現在の補正回転（視線軸＝カメラ Z 周りのロール）。カメラ空間で右から掛ける。
+    private var mirrorRotation: simd_float4x4 {
+        let angle = Float(mirrorRoll & 3) * (.pi / 2)
+        return simd_float4x4(simd_quatf(angle: angle, axis: SIMD3<Float>(0, 0, 1)))
+    }
 
     // 深度オドメトリ主軸（ICP をフレーム→モデルの主トラッカーにし、姿勢を累積する）。
     /// ON で深度オドメトリを主軸にする（ARKit は相対運動 prior のみ。長期ドリフトから独立）。既定 OFF。

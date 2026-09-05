@@ -59,6 +59,7 @@ export default function ScanSessionScreen() {
   const [isScanning, setIsScanning] = useState(false); // 実際の統合(engine.start/stop)
   const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(3D表示)
   const [mirror, setMirror] = useState(false); // 45°ミラー撮影モード
+  const [mirrorRoll, setMirrorRoll] = useState(0); // 0/1/2/3 = 0/90/180/270°
   const [exportFormat, setExportFormat] = useState(0); // 0:STLバイナリ 2:PLY(色付き)
   const [exportReq, setExportReq] = useState(0);
 
@@ -169,6 +170,7 @@ export default function ScanSessionScreen() {
         depthOdometry={true}
         colorBaking={true}
         mirrorMode={mirror}
+        mirrorRoll={mirrorRoll}
         exportFormat={exportFormat}
         exportRequest={exportReq}
       />
@@ -270,6 +272,15 @@ export default function ScanSessionScreen() {
                 適正 {Math.round(rangeMin * 100)}〜{Math.round(rangeMax * 100)}cm
               </Text>
             </View>
+          )}
+
+          {/* ミラー向き調整（スキャン中・ミラーON時。90°ずつ回して正しい向きを選ぶ） */}
+          {isScanning && mirror && (
+            <TouchableOpacity
+              style={styles.mirrorRollButton}
+              onPress={() => setMirrorRoll(r => (r + 1) % 4)}>
+              <Text style={styles.mirrorRollText}>🔄 向き {mirrorRoll * 90}°</Text>
+            </TouchableOpacity>
           )}
 
           {/* 上部: 戻る + ステータス */}
@@ -379,6 +390,16 @@ const styles = StyleSheet.create({
   mirrorToggleActive: {borderColor: '#5e5ce6', backgroundColor: 'rgba(94,92,230,0.14)'},
   mirrorToggleText: {color: '#888', fontSize: 15, fontWeight: '700'},
   mirrorToggleTextActive: {color: '#fff'},
+  mirrorRollButton: {
+    position: 'absolute',
+    bottom: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(94,92,230,0.9)',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+  },
+  mirrorRollText: {color: '#fff', fontSize: 14, fontWeight: '700'},
   startButton: {
     backgroundColor: '#5e5ce6',
     paddingHorizontal: 48,
