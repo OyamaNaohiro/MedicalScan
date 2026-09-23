@@ -142,6 +142,10 @@ final class ScanEngineHostView: UIView {
     @objc var mirrorRoll: Int = 0 {
         didSet { engine?.mirrorRoll = mirrorRoll }
     }
+    /// ミラー補正のピッチ（0/1/2/3 = 0/90/180/270°）。寝たモデルを起こす。
+    @objc var mirrorPitch: Int = 0 {
+        didSet { engine?.mirrorPitch = mirrorPitch }
+    }
 
     /// カラー焼き込みの ON/OFF。ON でカメラ映像をメッシュに頂点カラーとして焼き込む。既定 OFF。
     @objc var colorBaking: Bool = false {
@@ -278,6 +282,7 @@ final class ScanEngineHostView: UIView {
         engine?.depthOdometryEnabled = depthOdometry
         engine?.mirrorModeEnabled = mirrorMode
         engine?.mirrorRoll = mirrorRoll
+        engine?.mirrorPitch = mirrorPitch
         engine?.colorBakingEnabled = colorBaking
         engine?.exportDecimateRatio = Float(decimateRatio)
     }

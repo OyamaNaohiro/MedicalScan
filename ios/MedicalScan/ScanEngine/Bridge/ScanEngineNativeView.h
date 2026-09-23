@@ -26,6 +26,7 @@
 @property (nonatomic) BOOL depthOdometry;
 @property (nonatomic) BOOL mirrorMode;
 @property (nonatomic) NSInteger mirrorRoll;
+@property (nonatomic) NSInteger mirrorPitch;
 @property (nonatomic) BOOL colorBaking;
 @property (nonatomic) NSInteger exportFormat;
 @property (nonatomic) double exportRequest;

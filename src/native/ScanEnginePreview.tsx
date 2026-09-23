@@ -45,6 +45,7 @@ interface ScanEnginePreviewProps {
   depthOdometry?: boolean; // 深度オドメトリ主軸(ICPをフレーム→モデルの主トラッカーに)
   mirrorMode?: boolean; // ミラー撮影モード(45°ミラーで前面センサーを上方へ折り返す。姿勢を回転補正)
   mirrorRoll?: number; // ミラー補正の画面平面ロール 0/1/2/3 = 0/90/180/270°
+  mirrorPitch?: number; // ミラー補正のピッチ(起こす) 0/1/2/3 = 0/90/180/270°
   colorBaking?: boolean; // カラー焼き込み(カメラ映像を頂点カラーに)
   exportFormat?: number; // 0:binary 1:ascii
   exportRequest?: number; // タイムスタンプ変化で保存実行
@@ -83,6 +84,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
   depthOdometry = false,
   mirrorMode = false,
   mirrorRoll = 0,
+  mirrorPitch = 0,
   colorBaking = false,
   exportFormat = 0,
   exportRequest = 0,
@@ -115,6 +117,7 @@ const ScanEnginePreview: React.FC<ScanEnginePreviewProps> = ({
       depthOdometry={depthOdometry}
       mirrorMode={mirrorMode}
       mirrorRoll={mirrorRoll}
+      mirrorPitch={mirrorPitch}
       colorBaking={colorBaking}
       exportFormat={exportFormat}
       exportRequest={exportRequest}

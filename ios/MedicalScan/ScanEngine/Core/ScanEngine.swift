@@ -154,10 +154,15 @@ final class ScanEngine: DepthFrameSourceDelegate {
     var mirrorModeEnabled = false
     /// ミラー補正の画面平面ロール（0/1/2/3 = 0/90/180/270°）。実機で正しい向きを選ぶ。
     var mirrorRoll = 0
-    /// 現在の補正回転（視線軸＝カメラ Z 周りのロール）。カメラ空間で右から掛ける。
+    /// ミラー補正のピッチ（0/1/2/3 = 0/90/180/270°）。寝たモデルを起こす（顔を正面へ）。
+    var mirrorPitch = 0
+    /// 現在の補正回転。カメラ空間でピッチ(X軸)→ロール(Z軸)の順に掛ける（右から乗算）。
     private var mirrorRotation: simd_float4x4 {
-        let angle = Float(mirrorRoll & 3) * (.pi / 2)
-        return simd_float4x4(simd_quatf(angle: angle, axis: SIMD3<Float>(0, 0, 1)))
+        let roll = simd_float4x4(simd_quatf(
+            angle: Float(mirrorRoll & 3) * (.pi / 2), axis: SIMD3<Float>(0, 0, 1)))
+        let pitch = simd_float4x4(simd_quatf(
+            angle: Float(mirrorPitch & 3) * (.pi / 2), axis: SIMD3<Float>(1, 0, 0)))
+        return roll * pitch
     }
 
     // 深度オドメトリ主軸（ICP をフレーム→モデルの主トラッカーにし、姿勢を累積する）。

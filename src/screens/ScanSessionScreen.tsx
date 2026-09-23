@@ -59,7 +59,8 @@ export default function ScanSessionScreen() {
   const [isScanning, setIsScanning] = useState(false); // 実際の統合(engine.start/stop)
   const [view3D, setView3D] = useState(false); // false:深度 true:メッシュ(3D表示)
   const [mirror, setMirror] = useState(false); // 45°ミラー撮影モード
-  const [mirrorRoll, setMirrorRoll] = useState(0); // 0/1/2/3 = 0/90/180/270°
+  const [mirrorRoll, setMirrorRoll] = useState(0); // 0/1/2/3 = 0/90/180/270°(視線軸ロール)
+  const [mirrorPitch, setMirrorPitch] = useState(0); // 0/1/2/3 = 0/90/180/270°(起こす)
   const [exportFormat, setExportFormat] = useState(0); // 0:STLバイナリ 2:PLY(色付き)
   const [exportReq, setExportReq] = useState(0);
 
@@ -171,6 +172,7 @@ export default function ScanSessionScreen() {
         colorBaking={true}
         mirrorMode={mirror}
         mirrorRoll={mirrorRoll}
+        mirrorPitch={mirrorPitch}
         exportFormat={exportFormat}
         exportRequest={exportReq}
       />
@@ -274,13 +276,20 @@ export default function ScanSessionScreen() {
             </View>
           )}
 
-          {/* ミラー向き調整（スキャン中・ミラーON時。90°ずつ回して正しい向きを選ぶ） */}
+          {/* ミラー向き調整（スキャン中・ミラーON時。起こす=ピッチ / 回す=ロール を90°ずつ） */}
           {isScanning && mirror && (
-            <TouchableOpacity
-              style={styles.mirrorRollButton}
-              onPress={() => setMirrorRoll(r => (r + 1) % 4)}>
-              <Text style={styles.mirrorRollText}>🔄 向き {mirrorRoll * 90}°</Text>
-            </TouchableOpacity>
+            <View style={styles.mirrorAdjustRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.mirrorAdjustButton}
+                onPress={() => setMirrorPitch(p => (p + 1) % 4)}>
+                <Text style={styles.mirrorRollText}>⤴ 起こす {mirrorPitch * 90}°</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.mirrorAdjustButton}
+                onPress={() => setMirrorRoll(r => (r + 1) % 4)}>
+                <Text style={styles.mirrorRollText}>🔄 回す {mirrorRoll * 90}°</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {/* 上部: 戻る + ステータス */}
@@ -390,12 +399,18 @@ const styles = StyleSheet.create({
   mirrorToggleActive: {borderColor: '#5e5ce6', backgroundColor: 'rgba(94,92,230,0.14)'},
   mirrorToggleText: {color: '#888', fontSize: 15, fontWeight: '700'},
   mirrorToggleTextActive: {color: '#fff'},
-  mirrorRollButton: {
+  mirrorAdjustRow: {
     position: 'absolute',
     bottom: 120,
-    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  mirrorAdjustButton: {
     backgroundColor: 'rgba(94,92,230,0.9)',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 20,
   },
